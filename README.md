@@ -8,18 +8,18 @@
     - image_size: 128x256
     - poor result
     
-![result](./assests/DCGAN_city/train_078601.png)
+![result](./assests/DCGAN_city/test_000000.png)
 
-![log](./assests/DCGAN_city/tensorboard_city.png)
+![log](./assests/DCGAN_city/tensorbaord_city.png)
 - DCGAN_city_coarse
     - high_diversity (19998 scenes)
     - batch_size: 32
     - image_size: 256x512
     - appealing result
     
-![result](./assests/DCGAN_city_coarse/train_030401.png)
+![result](./assests/DCGAN_city_coarse/test_000000.png)
 
-![log](./assests/DCGAN_city_coarse/tensorboard_city_coarse.png)
+![log](./assests/DCGAN_city_coarse/tensorbaord_city_coarse.png)
 - BEGAN_city
 
 ![result](./assests/BEGAN_city/290500_G.png)
