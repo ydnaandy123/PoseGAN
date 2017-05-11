@@ -28,3 +28,9 @@
 
 ![result](./assests/BEGAN_city/tensorboard_city_misc.png)
 - BEGAN_city_coarse
+
+![result](./assests/BEGAN_city_coarse/300500_G.png)
+
+![result](./assests/BEGAN_city_coarse/tensorboard_city_coarse_scale.png)
+
+![result](./assests/BEGAN_city_coarse/tensorboard_city_coarse_misc.png)
