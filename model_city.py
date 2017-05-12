@@ -12,7 +12,7 @@ def conv_out_size_same(size, stride):
 
 
 class DCGAN_city(object):
-    def __init__(self, sess, config, z_dim=100,  gf_dim=64, df_dim=64,
+    def __init__(self, sess, config, z_dim=128,  gf_dim=64, df_dim=64,
          gfc_dim=1024, dfc_dim=1024, y_dim=None):
         """
         Args:
