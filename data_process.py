@@ -4,7 +4,7 @@ import os
 import scipy.misc
 import h5py
 from scipy.ndimage.filters import gaussian_filter
-
+import os.path
 
 def crop_images(dataset_dir):
     """
@@ -349,9 +349,121 @@ def read_crop_lsp_test():
                           img_small.astype(np.uint8))
 
 
+def crop_mpii(data_set_dir):
+    """
+    """
+    # All metedata
+    filename = '/data/vllab1/pose-hg-train/data/lsp_mpii.h5'
+    f = h5py.File(filename, 'r')
+    part = f['part']
+    center = f['center']
+    scale = f['scale']
+    imgname = f['imgname']
+    istrain = f['istrain']
+    visible = f['visible']
+    person = f['person']
+    # train images
+    for idx in range(12000, 40883):
+        print('{:d}/{:d}'.format(idx, 40883))
+        img_orb_name = imgname[idx]
+        im_name = ''
+        for char in img_orb_name:
+            im_name += chr(int(char))
+        im_name = im_name.split('.')[0]
+        img = scipy.misc.imread(os.path.join(data_set_dir, im_name + '.jpg')).astype(np.float32)
+        # Calculate region
+        img_height, img_width, _ = img.shape
+        long_side = int(np.ceil(scale[idx] * 100.))
+        img_center_x, img_center_y = int(center[idx][0]), int(center[idx][1])
+        pad_y_min, pad_x_min = img_center_y - long_side, img_center_x - long_side
+        x_min, x_max = max(pad_x_min, 0), min(img_center_x + long_side, img_width)
+        y_min, y_max = max(pad_y_min, 0), min(img_center_y + long_side, img_height)
+        margin_y_min, margin_x = y_min - pad_y_min, x_min - pad_x_min
+        # transplant image
+        img_center = img[y_min:y_max, x_min:x_max, :]
+        img_center_height, img_center_width, _ = img_center.shape
+        img_pad = np.zeros((long_side*2, long_side*2, 3), dtype=np.float32)
+        img_pad[margin_y_min:margin_y_min+img_center_height, margin_x:margin_x+img_center_width, :] = img_center
+        img_pad = scipy.misc.imresize(img_pad, (256, 256), interp='bilinear', mode=None)
+        # create heatmap
+        heatmap = np.ones((64, 64), np.uint8) * 255
+        for pose_idx in range(0, 16):
+            cord_x, cord_y = int(part[idx][pose_idx][0]), int(part[idx][pose_idx][1])
+            if visible[idx][pose_idx] == 0:
+                continue
+            cord_y = max((cord_y - pad_y_min), 0) / float(long_side) * 32.
+            cord_x = max((cord_x - pad_x_min), 0) / float(long_side) * 32.
+            cord_y = min(cord_y, 63)
+            cord_x = min(cord_x, 63)
+            cord_y, cord_x = int(np.round(cord_y)), int(np.round(cord_x))
+            heatmap[cord_y, cord_x] = (pose_idx + 1)
+
+        # Output
+        fname = im_name + '_' + str(person[idx]) + '.png'
+        scipy.misc.imsave(os.path.join('/data/vllab1/pose-hg-train/data/mpii/test/images', fname),
+                          img_pad.astype(np.float32), format='png')
+        scipy.misc.imsave(os.path.join('/data/vllab1/pose-hg-train/data/mpii/test/annot', fname),
+                          heatmap.astype(np.uint8), format='png')
+        #if idx > 12000 + 10:
+        #    break
+
+
+def read_crop_mpii():
+    """
+    """
+    # All metedata
+    filename = '/data/vllab1/pose-hg-train/data/lsp_mpii.h5'
+    f = h5py.File(filename, 'r')
+    part = f['part']
+    center = f['center']
+    scale = f['scale']
+    imgname = f['imgname']
+    istrain = f['istrain']
+    visible = f['visible']
+    person = f['person']
+    sig = 3
+    # train images
+    for idx in range(12000, 40883):
+        print('{:d}/{:d}'.format(idx, 40883))
+        '''
+        img_orb_name = imgname[idx]
+        im_name = ''
+        for char in img_orb_name:
+            im_name += chr(int(char))
+        '''
+        img_orb_name = imgname[idx]
+        im_name = ''
+        for char in img_orb_name:
+            im_name += chr(int(char))
+        im_name = im_name.split('.')[0] + '_' + str(person[idx])
+        img = scipy.misc.imread(os.path.join('/data/vllab1/pose-hg-train/data/mpii/test/images', im_name + '.png')).astype(np.float32)
+        heatmap = scipy.misc.imread(os.path.join('/data/vllab1/pose-hg-train/data/mpii/test/annot', im_name) + '.png').astype(np.float32)
+        # Parsing
+        img_small = scipy.misc.imresize(img, (64, 64), interp='bilinear', mode=None).astype(np.float32)
+        for pose_idx in range(0, 16):
+            heatmap_pose = np.zeros((64, 64), np.float32)
+            cord = np.nonzero(heatmap == (pose_idx + 1))
+            #if pose_idx == 6 or pose_idx == 7 or len(cord[0]) == 0:
+            #    continue
+            if len(cord[0]) == 0:
+                continue
+            heatmap_pose[cord] = 1
+            blurred = gaussian_filter(heatmap_pose, sigma=sig)
+            blurred /= np.max(blurred)
+
+            img_small[:, :, 0] += (blurred * 255.)
+            img_small[:, :, 2] += (blurred * 255.)
+
+            img_small[np.nonzero(img_small > 255)] = 255
+
+        # Output
+        scipy.misc.imsave(os.path.join('/data/vllab1/pose-hg-train/data/mpii/test/visual', im_name + '.png'), img_small.astype(np.uint8))
+
+        #if idx > 12000 + 10:
+        #    break
 
 
 if __name__ == '__main__':
-    #crop_lsp('/data/vllab1/pose-hg-train/data/LSP/images')
-    read_crop_lsp()
+    #crop_mpii('/data/vllab1/pose-hg-train/data/mpii/images')
+    #read_crop_mpii()
 

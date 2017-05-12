@@ -8,7 +8,7 @@ import tensorflow as tf
 
 flags = tf.app.flags
 flags.DEFINE_string("dataset_name", "lsp", "The name of dataset [celebA, mnist, lsun]")
-flags.DEFINE_string("mode", "train", "network mode [train, test]")
+flags.DEFINE_string("mode", "test", "network mode [train, test]")
 
 flags.DEFINE_string("image_dir", "/data/vllab1/pose-hg-train/data/LSP/train/images", "The directory of images")
 flags.DEFINE_string("input_fname_pattern", "*.png", "Glob pattern of filename of input images [*]")
