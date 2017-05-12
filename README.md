@@ -95,7 +95,7 @@
 
 ![result](./assests/BEGAN_city_coarse/tensorboard_city_coarse_misc.png)
 
-- BEGAN_city_coarse
+- BEGAN_city_coarse_gamma
     - **higher gamma -> higher k_t -> focus d_fake -> d_fake larger 
     -> higher diversity results -> not very realistic**
     - **gamma = 0.9**
@@ -108,6 +108,19 @@
 ![result](./assests/BEGAN_city_coarse/tensorboard_city_coarse_0_9_scale.png)
 
 ![result](./assests/BEGAN_city_coarse/tensorboard_city_coarse_0_9_misc.png)
+
+- BEGAN_city_coarse_lr
+    - **lower learning rate seems perform better**
+    - gamma = 0.5
+    - **d_lr = 0.00004**
+    - **g_lr = 0.00004**
+    - lr_lower_boundary = 0.00002
+
+![result](./assests/BEGAN_city_coarse/lr_half.png)
+
+![result](./assests/BEGAN_city_coarse/tensorboard_city_coarse_lr_half_scale.png)
+
+![result](./assests/BEGAN_city_coarse/tensorboard_city_coarse_lr_half_misc.png)
 
 - BEGAN_lsp
     - **almost same with city_coarse**
@@ -125,7 +138,7 @@
 ![result](./assests/BEGAN_lsp/tensorboard_lsp_misc.png)
 
 
-- BEGAN_lsp
+- BEGAN_lsp_gamma
     - **differ from city_coarse, the model seems to collapse**
     - **higher gamma -> higher k_t -> focus d_fake -> d_fake larger 
     -> higher diversity results -> not very realistic**
@@ -139,3 +152,16 @@
 ![result](./assests/BEGAN_lsp/tensorboard_lsp_0_9_scale.png)
 
 ![result](./assests/BEGAN_lsp/tensorboard_lsp_0_9_misc.png)
+
+- BEGAN_lsp_lr
+    - **lower learning rate seems perform better**
+    - gamma = 0.5
+    - **d_lr = 0.00004**
+    - **g_lr = 0.00004**
+    - lr_lower_boundary = 0.00002
+    
+![result](./assests/BEGAN_lsp/lr_half.png)
+
+![result](./assests/BEGAN_lsp/tensorboard_lsp_lr_half_scale.png)
+
+![result](./assests/BEGAN_lsp/tensorboard_lsp_lr_half_misc.png)
