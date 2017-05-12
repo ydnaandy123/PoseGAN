@@ -17,8 +17,8 @@
     
 ![result](./assests/DCGAN_city_coarse/test_000000.png)
 
-![log](./assests/DCGAN_city_coarse/tensorbaord_city_coarse.png
-)
+![log](./assests/DCGAN_city_coarse/tensorbaord_city_coarse.png)
+
 - DCGAN_lsp
     - high_diversity (11000 scenes)
     - batch_size: 32
@@ -26,7 +26,7 @@
     
 ![result](./assests/DCGAN_lsp/test_000000.png)
 
-![log](./assests/DCGAN_lsp/tensorbaord_lsp.png)
+![log](./assests/DCGAN_lsp/tensorboard_lsp.png)
 
 - MPII
     (28883)
