@@ -463,7 +463,36 @@ def read_crop_mpii():
         #    break
 
 
+def LSP_heatmap_like_images():
+    data_set_dir = '/data/vllab1/pose-hg-train/data/LSP/train/images'
+    data = glob(os.path.join(data_set_dir, "*.png"))
+    sig = 3
+
+    for index, filePath in enumerate(data):
+        print ('%d/%d' % (index, len(data)))
+        img_name = filePath.split('/')[-1]
+        #img = scipy.misc.imread(filePath).astype(np.float32)
+        heatmap = scipy.misc.imread(os.path.join('/data/vllab1/pose-hg-train/data/LSP/train/annot', img_name)).astype(np.float32)
+        heatmap_like = np.zeros((64, 64, 3)).astype(np.float32)
+
+        for pose_idx in range(0, 3):
+            heatmap_pose = np.zeros((64, 64), np.float32)
+            cord = np.nonzero(heatmap == (pose_idx + 1))
+            #if pose_idx == 6 or pose_idx == 7 or len(cord[0]) == 0:
+            #    continue
+            if len(cord[0]) == 0:
+                continue
+            heatmap_pose[cord] = 1
+            blurred = gaussian_filter(heatmap_pose, sigma=sig)
+            blurred /= np.max(blurred)
+
+            heatmap_like[:, :, pose_idx] += (blurred * 255.)
+
+        heatmap_like[np.nonzero(heatmap_like > 255)] = 255
+
+        scipy.misc.imsave(os.path.join('/data/vllab1/pose-hg-train/data/LSP/train/heatmap_like', img_name), heatmap_like.astype(np.uint8))
+
+
 if __name__ == '__main__':
-    #crop_mpii('/data/vllab1/pose-hg-train/data/mpii/images')
-    #read_crop_mpii()
+    LSP_heatmap_like_images()
 
