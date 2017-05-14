@@ -8,7 +8,7 @@ import tensorflow as tf
 
 flags = tf.app.flags
 flags.DEFINE_string("dataset_name", "heatmap_joint", "The name of dataset [celebA, mnist, lsun]")
-flags.DEFINE_string("mode", "train", "network mode [train, test]")
+flags.DEFINE_string("mode", "test", "network mode [train, test]")
 
 flags.DEFINE_string("image_dir", "/data/vllab1/pose-hg-train/data/LSP/train/heatmap_like", "The directory of images")
 flags.DEFINE_string("input_fname_pattern", "*.png", "Glob pattern of filename of input images [*]")
@@ -18,7 +18,7 @@ flags.DEFINE_string("sample_dir", "samples", "Directory name to save the image s
 flags.DEFINE_string("test_dir", "test", "Directory name to save the image samples [samples]")
 
 flags.DEFINE_integer("sample_num", 16, "The number of sample images [64]")
-flags.DEFINE_integer("batch_size", 256, "The size of batch images [64]")
+flags.DEFINE_integer("batch_size", 32, "The size of batch images [64]")
 flags.DEFINE_integer("input_height", 64, "The size of image to use (will be center cropped). [108]")
 flags.DEFINE_integer("input_width", 64, "The size of image to use (will be center cropped). If None, same value as input_height [None]")
 flags.DEFINE_integer("output_height", 64, "The size of the output images to produce [64]")

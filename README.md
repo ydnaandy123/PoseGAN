@@ -2,11 +2,16 @@
 
 ## Training note
 - DCGAN
-    - city, difficult to G (D memorize all images?)
-    - lsp, difficult to D_real (images too wild, D can't recognize, G can't improve?)
+    - city: difficult to G (D memorize all real images?)
+    - lsp: difficult to D_real (images too wild, D can't recognize, G can't improve?)
+    - summary:
+        1. dataset better contain enough diversity
+        2. if dataset is too messy,  G may not learn well
+        3. heatmap...?
 - BEGAN    
+    - d_real * gamma = d_fake -> balanced
     - higher gamma -> higher diversity
-    - hard to reconstruct -> focus on real -> lower diversity
+    
 ### DCGAN Record
 
 - DCGAN_face    
@@ -189,7 +194,7 @@
 ![result](./assests/BEGAN_lsp/tensorboard_lsp_lr_half_misc.png)
 
 - BEGAN_heatmap
-    - **lower learning rate seems perform better**
+    - **failed**
     - gamma = 0.5
     - **d_lr = 0.00004**
     - **g_lr = 0.00004**
@@ -197,9 +202,9 @@
     
 ![result](./assests/BEGAN_heatmap/71000_G.png)
 
-![result](./assests/BEGAN_lsp/tensorboard_lsp_lr_half_scale.png)
+![result](./assests/BEGAN_heatmap/tensorboard_heatmap_scale.png)
 
-![result](./assests/BEGAN_lsp/tensorboard_lsp_lr_half_misc.png)
+![result](./assests/BEGAN_heatmap/tensorboard_heatmap_misc.png)
 
 
 - BEGAN_heatmap_joint
@@ -211,6 +216,6 @@
     
 ![result](./assests/BEGAN_heatmap_joint/71000_G.png)
 
-![result](./assests/BEGAN_lsp/tensorboard_lsp_lr_half_scale.png)
+![result](./assests/BEGAN_heatmap_joint/tensorboard_heatmap_joint_scale.png)
 
-![result](./assests/BEGAN_lsp/tensorboard_lsp_lr_half_misc.png)
+![result](./assests/BEGAN_heatmap_joint/tensorboard_heatmap_joint_misc.png)

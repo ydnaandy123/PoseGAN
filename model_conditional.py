@@ -11,7 +11,7 @@ def conv_out_size_same(size, stride):
     return int(math.ceil(float(size) / float(stride)))
 
 
-class DCGAN_city(object):
+class DCGAN_conditional(object):
     def __init__(self, sess, config, z_dim=100,  gf_dim=64, df_dim=64,
          gfc_dim=1024, dfc_dim=1024, y_dim=None):
         """
