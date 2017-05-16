@@ -66,6 +66,8 @@ class DCGAN_city(object):
         self.g_bn2 = batch_norm(name='g_bn2')
         self.g_bn3 = batch_norm(name='g_bn3')
 
+        self.num_of_class = config.num_of_class
+
         self.dataset_name = config.dataset_name
         self.image_dir = config.image_dir
         self.input_fname_pattern = config.input_fname_pattern
@@ -79,6 +81,13 @@ class DCGAN_city(object):
         self.build_model()
 
     def build_model(self):
+        keep_probability = tf.placeholder(tf.float32, name="keep_probability")
+        image = tf.placeholder(tf.float32, shape=[None, self.input_height, self.input_width, self.c_dim], name="input_image")
+        annotation = tf.placeholder(tf.float32,shape=[None, self.output_height, self.output_width, self.num_of_class], name="annotation")
+        with tf.variable_scope("fcn"):
+            pred_annotation, logits = fcn.inference(image, keep_probability)
+            loss_fcn = tf.losses.mean_squared_error(labels=annotation, predictions=logits)
+        fcn_variable = tf.get_collection(key=tf.GraphKeys.TRAINABLE_VARIABLES, scope='fcn')
 
         image_dims = [self.output_height, self.output_width, self.c_dim]
 

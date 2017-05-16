@@ -2,15 +2,24 @@
 
 ## Training note
 - DCGAN
-    - city: difficult to G (D memorize all real images?)
-    - lsp: difficult to D_real (images too wild, D can't recognize, G can't improve?)
-    - summary:
-        1. dataset better contain enough diversity
-        2. if dataset is too messy,  G may not learn well
-        3. heatmap...?
+    1. dataset better contain enough diversity
+        - city
+    2. if dataset is too messy,  G may not learn well
+        - lsp
+    3. heatmap...?
+    4. bigger batch size better
+        - heatmap_joint
 - BEGAN    
-    - d_real * gamma = d_fake -> balanced
-    - higher gamma -> higher diversity
+    1. good training: balanced, k_t != 0, d_fake pulling around
+        - balance = gamma * d_loss_real - g_loss(d_loss_fake)
+        - k_t += lambda_k * balance
+        - d_loss = d_loss_real - k_t * d_loss_fake
+    2. D too weak -> **balance grow up** -> k_t grow up (D will focus on d_fake)
+    3. G too weak (D too strong) -> **balance drop down** -> k_t drop down (avoid D mistakenly think he is strong)
+    3. higher gamma -> higher diversity
+    - summary:
+        1. learning better lower (around 4e-4)
+        2. 
     
 ### DCGAN Record
 
@@ -55,7 +64,6 @@
 
 
 - DCGAN_heatmap
-    - **works! (6509 from 194 scenes)**
     - batch_size: 32
     - image_size: 128x256
     
@@ -74,6 +82,15 @@
 ![result](./assests/DCGAN_heatmap_joint/train_147701.png)
 
 ![log](./assests/DCGAN_heatmap_joint/tensorboard_heatmap_joint.png)
+
+
+- DCGAN_heatmap_joint
+    - **batch_size: 256**
+    - image_size: 64x64
+    
+![result](./assests/DCGAN_heatmap_joint/test_000000_batch_256.png)
+
+![log](./assests/DCGAN_heatmap_joint/tensorboard_heatmap_joint_batch_256.png)
 
 ### BEGAN Record
 

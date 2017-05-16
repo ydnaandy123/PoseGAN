@@ -7,6 +7,14 @@ merge_summary = tf.summary.merge
 SummaryWriter = tf.summary.FileWriter
 
 
+def max_pool_4x4(x):
+    return tf.nn.max_pool(x, ksize=[1, 4, 4, 1], strides=[1, 4, 4, 1], padding="SAME")
+
+
+def max_pool_2x2(x):
+    return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+
+
 def conv2d(input_, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.02, name="conv2d"):
     with tf.variable_scope(name):
         w = tf.get_variable('w', [k_h, k_w, input_.get_shape()[-1], output_dim],

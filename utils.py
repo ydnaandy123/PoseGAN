@@ -14,6 +14,7 @@ from six.moves import xrange
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import os
+from scipy.ndimage.filters import gaussian_filter
 
 pp = pprint.PrettyPrinter()
 
@@ -25,10 +26,10 @@ def config_check(FLAGS):
     FLAGS.test_dir = FLAGS.test_dir + '_' + FLAGS.dataset_name
     FLAGS.sample_dir = FLAGS.sample_dir + '_' + FLAGS.dataset_name
 
-    if FLAGS.input_width is None:
-        FLAGS.input_width = FLAGS.input_height
-    if FLAGS.output_width is None:
-        FLAGS.output_width = FLAGS.output_height
+    if FLAGS.image_width is None:
+        FLAGS.image_width = FLAGS.image_height
+    if FLAGS.condition_width is None:
+        FLAGS.condition_width = FLAGS.condition_height
 
     if not os.path.exists(FLAGS.checkpoint_dir):
         os.makedirs(FLAGS.checkpoint_dir)
@@ -37,7 +38,9 @@ def config_check(FLAGS):
     if not os.path.exists(FLAGS.test_dir):
         os.makedirs(FLAGS.test_dir)
 
-    return FLAGS
+    return FLAGS, "{}_{}_{}_{}".format(
+        FLAGS.dataset_name, FLAGS.batch_size,
+        FLAGS.image_height, FLAGS.image_width)
 
 
 def show_all_variables():
@@ -45,20 +48,83 @@ def show_all_variables():
     slim.model_analyzer.analyze_vars(model_vars, print_info=True)
 
 
+def get_image_condition_pose(files, condition_dir):
+    images, conditions = [], []
+    for name_file in files:
+        # pose heatmap
+        image = scipy.misc.imread(name_file).astype(np.float32)
+        heatmap_joints = np.zeros((64, 64, 16)).astype(np.float32)
+        for pose_idx in range(0, 16):
+            heatmap_joint = np.zeros((64, 64), np.float32)
+            cord_y, cord_x = np.nonzero(image == (pose_idx + 1))
+            #if pose_idx == 6 or pose_idx == 7 or len(cord[0]) == 0:
+            #    continue
+            if len(cord_y) == 0:
+                continue
+            heatmap_joint[cord_y, cord_x] = 1
+            blurred = gaussian_filter(heatmap_joint, sigma=3)
+            blurred /= np.max(blurred)
+
+            heatmap_joints[:, :, pose_idx] = blurred
+        heatmap_joints = (heatmap_joints * 2.) - 1.
+        images.append(heatmap_joints)
+
+        name = name_file.split('/')[-1]
+        condition = simple_get_image(os.path.join(condition_dir, name))
+        conditions.append(condition)
+
+    return np.array(images).astype(np.float32), np.array(conditions).astype(np.float32)
+
+
+def heatmap_visual(heatmaps):
+    heatmap_vs = []
+    heatmaps = (heatmaps + 1.) * 127.5
+    for heatmap in heatmaps:
+        heatmap_v = np.zeros((64, 64, 3), dtype=np.float32)
+        for pose_idx in [0, 1, 2, 10, 11, 12]:
+            heatmap_v[:, :, 0] += heatmap[:, :, pose_idx]
+        for pose_idx in [3, 4, 5, 13, 14, 15]:
+            heatmap_v[:, :, 2] += heatmap[:, :, pose_idx]
+        for pose_idx in [6, 7, 8, 9]:
+            heatmap_v[:, :, 1] += heatmap[:, :, pose_idx]
+
+        heatmap_v[np.nonzero(heatmap_v > 255.)] = 255.
+        heatmap_vs.append(heatmap_v)
+
+    return np.array(heatmap_vs).astype(np.float32)
+
+
+def heatmap_visual_sig(heatmaps):
+    heatmap_vs = []
+    heatmaps = heatmaps * 255.
+    for heatmap in heatmaps:
+        heatmap_v = np.zeros((64, 64, 3), dtype=np.float32)
+        for pose_idx in [0, 1, 2, 10, 11, 12]:
+            heatmap_v[:, :, 0] += heatmap[:, :, pose_idx]
+        for pose_idx in [3, 4, 5, 13, 14, 15]:
+            heatmap_v[:, :, 2] += heatmap[:, :, pose_idx]
+        for pose_idx in [6, 7, 8, 9]:
+            heatmap_v[:, :, 1] += heatmap[:, :, pose_idx]
+
+        heatmap_v[np.nonzero(heatmap_v > 255.)] = 255.
+        heatmap_vs.append(heatmap_v)
+
+    return np.array(heatmap_vs).astype(np.float32)
+
+
 def simple_get_image(path):
     img = scipy.misc.imread(path).astype(np.float)
     return np.array(img) / 127.5 - 1.
 
 
-def get_image(image_path, input_height, input_width,
-              resize_height=64, resize_width=64,
-              crop=True, grayscale=False):
+def get_image(image_path, input_height, input_width, resize_height=64, resize_width=64, crop=True, grayscale=False):
     image = imread(image_path, grayscale)
-    return transform(image, input_height, input_width,
-                     resize_height, resize_width, crop)
+    return transform(image, input_height, input_width, resize_height, resize_width, crop)
+
 
 def save_images(images, size, image_path):
     return imsave(inverse_transform(images), size, image_path)
+
 
 def imread(path, grayscale = False):
     if (grayscale):
@@ -66,8 +132,10 @@ def imread(path, grayscale = False):
     else:
         return scipy.misc.imread(path).astype(np.float)
 
+
 def merge_images(images, size):
     return inverse_transform(images)
+
 
 def merge(images, size):
     h, w = images.shape[1], images.shape[2]
@@ -89,6 +157,7 @@ def merge(images, size):
     else:
         raise ValueError('in merge(images,size) images parameter '
                          'must have dimensions: HxW or HxWx3 or HxWx4')
+
 
 def imsave(images, size, path):
     image = np.squeeze(merge(images, size))

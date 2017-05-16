@@ -1,10 +1,14 @@
 import tensorflow as tf
 
 
-def add_activation_summary(var):
-    if var is not None:
-        tf.summary.histogram(var.op.name + "/activation", var)
-        tf.summary.scalar(var.op.name + "/sparsity", tf.nn.zero_fraction(var))
+def process_image(image, mean_pixel):
+    return image - mean_pixel
+
+
+def get_variable(weights, name):
+    init = tf.constant_initializer(weights, dtype=tf.float32)
+    var = tf.get_variable(name=name, initializer=init,  shape=weights.shape)
+    return var
 
 
 def conv2d_transpose_strided(x, W, b, output_shape=None, stride = 2):
@@ -46,5 +50,16 @@ def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 
-def process_image(image, mean_pixel):
-    return image - mean_pixel
+def avg_pool_2x2(x):
+    return tf.nn.avg_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+
+
+def add_gradient_summary(grad, var):
+    if grad is not None:
+        tf.summary.histogram(var.op.name + "/gradient", grad)
+
+
+def add_activation_summary(var):
+    if var is not None:
+        tf.summary.histogram(var.op.name + "/activation", var)
+        tf.summary.scalar(var.op.name + "/sparsity", tf.nn.zero_fraction(var))
