@@ -3,6 +3,13 @@
     <words>
       <w>annot</w>
       <w>annots</w>
+      <w>fname</w>
+      <w>lamda</w>
+      <w>lrelu</w>
+      <w>mpii</w>
+      <w>optim</w>
+      <w>tanh</w>
+      <w>wgan</w>
     </words>
   </dictionary>
 </component>

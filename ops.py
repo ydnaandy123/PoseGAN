@@ -44,8 +44,8 @@ def deconv2d(input_, output_shape, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.02, name
             return deconv
 
 
-def linear(input_, input_dim, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=False):
-
+def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=False):
+    input_dim = input_.get_shape().as_list()[1]
     with tf.variable_scope(scope or "Linear"):
         matrix = tf.get_variable("Matrix", [input_dim, output_size], tf.float32,
                                  tf.random_normal_initializer(stddev=stddev))
@@ -61,6 +61,10 @@ def lrelu(x, leak=0.2, name="lrelu"):
     return tf.maximum(x, leak*x)
 
 
+def bn(inputs, training=True, momentum=0.9, epsilon=1e-5):
+    return tf.layers.batch_normalization(inputs, training=training, momentum=momentum, epsilon=epsilon)
+
+
 class batch_norm(object):
     def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
         with tf.variable_scope(name):
@@ -71,3 +75,68 @@ class batch_norm(object):
     def __call__(self, x, train=True):
         return tf.contrib.layers.batch_norm(x, decay=self.momentum, updates_collections=None, epsilon=self.epsilon,
                                             scale=True, is_training=train, scope=self.name)
+
+###
+# FCN
+###
+
+
+def get_variable(weights, name):
+    init = tf.constant_initializer(weights, dtype=tf.float32)
+    var = tf.get_variable(name=name, initializer=init,  shape=weights.shape)
+    return var
+
+
+def conv2d_basic(x, W, bias):
+    conv = tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding="SAME")
+    return tf.nn.bias_add(conv, bias)
+
+
+def avg_pool_2x2(x):
+    return tf.nn.avg_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+
+
+def add_activation_summary(var):
+    if var is not None:
+        tf.summary.histogram(var.op.name + "/activation", var)
+        tf.summary.scalar(var.op.name + "/sparsity", tf.nn.zero_fraction(var))
+
+
+def bias_variable(shape, name=None):
+    initial = tf.constant(0.0, shape=shape)
+    if name is None:
+        return tf.Variable(initial)
+    else:
+        return tf.get_variable(name, initializer=initial)
+
+
+def weight_variable(shape, stddev=0.02, name=None):
+    # print(shape)
+    initial = tf.truncated_normal(shape, stddev=stddev)
+    if name is None:
+        return tf.Variable(initial)
+    else:
+        return tf.get_variable(name, initializer=initial)
+
+
+def conv2d_transpose_strided(x, W, b, output_shape=None, stride=2):
+    # print x.get_shape()
+    # print W.get_shape()
+    if output_shape is None:
+        output_shape = x.get_shape().as_list()
+        output_shape[1] *= 2
+        output_shape[2] *= 2
+        output_shape[3] = W.get_shape().as_list()[2]
+    # print output_shape
+    conv = tf.nn.conv2d_transpose(x, W, output_shape, strides=[1, stride, stride, 1], padding="SAME")
+    return tf.nn.bias_add(conv, b)
+
+"""
+" dense net
+"""
+
+def transition_down(I):
+    I = tf.contrib.layers.batch_norm(I, decay=0.9, updates_collections=None, epsilon=1e-5,
+                                            scale=True, is_training=train, scope=self.name)
+
+

@@ -36,7 +36,7 @@ FLAGS = flags.FLAGS
 def main(_):
     pp.pprint(flags.FLAGS.__flags)
 
-    config = config_check(FLAGS)
+    config, model_dir = config_check(FLAGS)
 
     run_config = tf.ConfigProto()
     run_config.gpu_options.allow_growth = True

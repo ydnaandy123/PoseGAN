@@ -2,45 +2,88 @@
 Some codes from https://github.com/Newmu/dcgan_code
 """
 from __future__ import division
+import tensorflow as tf
+import tensorflow.contrib.slim as slim
+import os
 import math
-import json
 import random
 import pprint
 import scipy.misc
 import numpy as np
 from time import gmtime, strftime
-from six.moves import xrange
-
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
-import os
+from skimage.draw import line
 from scipy.ndimage.filters import gaussian_filter
 
+
 pp = pprint.PrettyPrinter()
+
 
 get_stddev = lambda x, k_h, k_w: 1/math.sqrt(k_w*k_h*x.get_shape()[-1])
 
 
-def config_check(FLAGS):
+def config_check(flags, default_setting=False):
 
-    FLAGS.test_dir = FLAGS.test_dir + '_' + FLAGS.dataset_name
-    FLAGS.sample_dir = FLAGS.sample_dir + '_' + FLAGS.dataset_name
+    if default_setting:
+        if flags.name.find('cityscapes') != -1:
+            flags.dataset_name = 'CITYSCAPES_DATASET'
+            if flags.name.find('semantic') != -1:
+                flags.image_dir = './dataset/CITYSCAPES_DATASET/train/semantic_color'
+                flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/image'
+                flags.input_fname_pattern = '*.png'
+                flags.image_height = 256
+                flags.image_width = 512
+                flags.image_dim = 3
+                flags.condition_height = 256
+                flags.condition_width = 512
+                flags.condition_dim = 3
+            if flags.name.find('image') != -1:
+                flags.image_dir = './dataset/CITYSCAPES_DATASET/train/image'
+                flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/semantic_color'
+                flags.input_fname_pattern = '*.png'
+                flags.image_height = 256
+                flags.image_width = 512
+                flags.image_dim = 3
+                flags.condition_height = 256
+                flags.condition_width = 512
+                flags.condition_dim = 3
+        elif flags.name.find('mpii') != -1:
+            flags.dataset_name = 'MPII'
+            if flags.name.find('heatmap') != -1:
+                flags.image_dir = './dataset/MPII/train/annot'
+                flags.condition_dir = './dataset/MPII/train/images'
+                flags.input_fname_pattern = '*.png'
+                flags.image_height = 256
+                flags.image_width = 256
+                flags.image_dim = 3
+                flags.condition_height = 256
+                flags.condition_width = 256
+                flags.condition_dim = 3
 
-    if FLAGS.image_width is None:
-        FLAGS.image_width = FLAGS.image_height
-    if FLAGS.condition_width is None:
-        FLAGS.condition_width = FLAGS.condition_height
+        flags.need_condition = (flags.name.find('(y)condition') != -1)
+        flags.need_g1 = (flags.name.find('(y)g1') != -1)
 
-    if not os.path.exists(FLAGS.checkpoint_dir):
-        os.makedirs(FLAGS.checkpoint_dir)
-    if not os.path.exists(FLAGS.sample_dir):
-        os.makedirs(FLAGS.sample_dir)
-    if not os.path.exists(FLAGS.test_dir):
-        os.makedirs(FLAGS.test_dir)
+    flags.test_dir = flags.name + '_' + flags.test_dir
+    flags.sample_dir = flags.name + '_' + flags.sample_dir
 
-    return FLAGS, "{}_{}_{}_{}".format(
-        FLAGS.dataset_name, FLAGS.batch_size,
-        FLAGS.image_height, FLAGS.image_width)
+    try:
+        if flags.image_width is None:
+            flags.image_width = flags.image_height
+        if flags.condition_width is None:
+            flags.condition_width = flags.condition_height
+        model_dir = "{}_{}_{}_{}".format(flags.name, flags.batch_size, flags.image_height, flags.image_width)
+    except AttributeError:
+        if flags.input_width is None:
+            flags.input_width = flags.input_height
+        if flags.output_width is None:
+            flags.output_width = flags.output_height
+        model_dir = "{}_{}_{}_{}".format(flags.name, flags.batch_size, flags.output_height, flags.output_width)
+
+    if not os.path.exists(flags.checkpoint_dir):
+        os.makedirs(flags.checkpoint_dir)
+    if not os.path.exists(flags.sample_dir):
+        os.makedirs(flags.sample_dir)
+
+    return flags, model_dir
 
 
 def show_all_variables():
@@ -48,13 +91,31 @@ def show_all_variables():
     slim.model_analyzer.analyze_vars(model_vars, print_info=True)
 
 
-def get_image_condition_pose(files, condition_dir):
+def get_image_condition(files, condition_dir, need_flip=True):
+    images, conditions = [], []
+    for name_idx, name_file in enumerate(files):
+        # pose heatmap
+        name = name_file.split('/')[-1]
+        image = scipy.misc.imread(name_file).astype(np.float32)[:, :, :3]
+        condition = scipy.misc.imread(os.path.join(condition_dir, name)).astype(np.float32)[:, :, :3]
+        if need_flip and name_idx > len(files) / 2:
+            image = np.fliplr(image)
+            condition = np.fliplr(condition)
+        images.append(image)
+        conditions.append(condition)
+
+    images = np.array(images).astype(np.float32) / 127.5 - 1.
+    conditions = np.array(conditions).astype(np.float32) / 127.5 - 1.
+    return images, conditions
+
+
+def get_image_condition_pose(files, condition_dir, pose_num=16):
     images, conditions = [], []
     for name_file in files:
         # pose heatmap
         image = scipy.misc.imread(name_file).astype(np.float32)
-        heatmap_joints = np.zeros((64, 64, 16)).astype(np.float32)
-        for pose_idx in range(0, 16):
+        heatmap_joints = np.zeros((64, 64, pose_num)).astype(np.float32)
+        for pose_idx in range(0, pose_num):
             heatmap_joint = np.zeros((64, 64), np.float32)
             cord_y, cord_x = np.nonzero(image == (pose_idx + 1))
             #if pose_idx == 6 or pose_idx == 7 or len(cord[0]) == 0:
@@ -76,9 +137,109 @@ def get_image_condition_pose(files, condition_dir):
     return np.array(images).astype(np.float32), np.array(conditions).astype(np.float32)
 
 
+def get_image_condition_pose_mpii(files, condition_dir, channel_num=29):
+    """
+    :param files: image_dir
+    :param condition_dir: heatmap_dir (64x64)
+    :param channel_num: num of channels (max:16+13)
+    :return: image and heatmap(64x64x(16+13)), normalized in -1~1
+    """
+    images, conditions = [], []
+    part_array = [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 12, 13, 14]
+    for name_file in files:
+        # pose heatmap
+        image = scipy.misc.imread(name_file).astype(np.float32)
+        heatmap = np.zeros((64, 64, channel_num)).astype(np.float32)
+        cur_channel = 0
+        # every joints and limbs
+        for pose_idx in range(0, 16):
+            # joints
+            heatmap_joint = np.zeros((64, 64), np.float32)
+            cord_y, cord_x = np.nonzero(image == (pose_idx + 1))
+            if len(cord_y) != 0:
+                heatmap_joint[cord_y, cord_x] = 1
+                blurred = gaussian_filter(heatmap_joint, sigma=3)
+                blurred /= np.max(blurred)
+                heatmap[:, :, cur_channel] = blurred
+            cur_channel += 1
+            if cur_channel == channel_num:
+                break
+            # limbs
+            if pose_idx in part_array:
+                heatmap_limb = np.zeros((64, 64), np.float32)
+                cord_y_end, cord_x_end = np.nonzero(image == (pose_idx + 2))
+                if len(cord_y) != 0 and len(cord_y_end) != 0:
+                    rr, cc = line(cord_y, cord_x, cord_y_end, cord_x_end)
+                    heatmap_limb[rr, cc] = 1
+                    blurred = gaussian_filter(heatmap_limb, sigma=2)
+                    blurred /= np.max(blurred)
+                    heatmap[:, :, cur_channel] = blurred
+                cur_channel += 1
+                if cur_channel == channel_num:
+                    break
+        heatmap = (heatmap * 2.) - 1.
+        images.append(heatmap)
+
+        name = name_file.split('/')[-1]
+        condition = simple_get_image(os.path.join(condition_dir, name))
+        conditions.append(condition)
+
+    return np.array(images).astype(np.float32), np.array(conditions).astype(np.float32)
+
+
+def get_image_condition_pose_mpii_big(files, condition_dir, channel_num=29):
+    """
+    :param files: image_dir
+    :param condition_dir: heatmap_dir (64x64)
+    :param channel_num: num of channels (max:16+13)
+    :return: image and heatmap(64x64x(16+13)), normalized in -1~1
+    """
+    images, conditions = [], []
+    part_array = [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 12, 13, 14]
+    for name_file in files:
+        # pose heatmap
+        image = scipy.misc.imread(name_file).astype(np.float32)
+        heatmap = np.zeros((256, 256, channel_num)).astype(np.float32)
+        cur_channel = 0
+        # every joints and limbs
+        for pose_idx in range(0, 16):
+            # joints
+            heatmap_joint = np.zeros((256, 256), np.float32)
+            cord_y, cord_x = np.nonzero(image == (pose_idx + 1))
+            if len(cord_y) != 0:
+                heatmap_joint[cord_y * 4, cord_x * 4] = 1
+                blurred = gaussian_filter(heatmap_joint, sigma=12)
+                blurred /= np.max(blurred)
+                heatmap[:, :, cur_channel] = blurred
+            cur_channel += 1
+            if cur_channel == channel_num:
+                break
+            # limbs
+            if pose_idx in part_array:
+                heatmap_limb = np.zeros((256, 256), np.float32)
+                cord_y_end, cord_x_end = np.nonzero(image == (pose_idx + 2))
+                if len(cord_y) != 0 and len(cord_y_end) != 0:
+                    rr, cc = line(cord_y * 4, cord_x * 4,
+                                  cord_y_end * 4, cord_x_end * 4)
+                    heatmap_limb[rr, cc] = 1
+                    blurred = gaussian_filter(heatmap_limb, sigma=8)
+                    blurred /= np.max(blurred)
+                    heatmap[:, :, cur_channel] = blurred
+                cur_channel += 1
+                if cur_channel == channel_num:
+                    break
+        heatmap = (heatmap * 2.) - 1.
+        images.append(heatmap)
+
+        name = name_file.split('/')[-1]
+        condition = simple_get_image(os.path.join(condition_dir, name))
+        conditions.append(condition)
+
+    return np.array(images).astype(np.float32), np.array(conditions).astype(np.float32)
+
+
 def heatmap_visual(heatmaps):
     heatmap_vs = []
-    heatmaps = (heatmaps + 1.) * 127.5
     for heatmap in heatmaps:
         heatmap_v = np.zeros((64, 64, 3), dtype=np.float32)
         for pose_idx in [0, 1, 2, 10, 11, 12]:
@@ -92,6 +253,81 @@ def heatmap_visual(heatmaps):
         heatmap_vs.append(heatmap_v)
 
     return np.array(heatmap_vs).astype(np.float32)
+
+
+def heatmap_visual_mpii(heatmaps):
+    """
+    :param heatmaps: (w*h*29) 0~255
+    :return: (w*h*3) 0~255
+    """
+    h, w = heatmaps.shape[1], heatmaps.shape[2]
+    heatmap_vs = []
+    for heatmap in heatmaps:
+        heatmap_v = np.zeros((h, w, 3), dtype=np.float32)
+        # right legs
+        for pose_idx in range(0, 5):
+            heatmap_v[:, :, 0] += heatmap[:, :, pose_idx] * 0.8
+        # left legs
+        for pose_idx in range(6, 11):
+            heatmap_v[:, :, 2] += heatmap[:, :, pose_idx] * 0.8
+        # trunk
+        for pose_idx in range(11, 18):
+            heatmap_v[:, :, 1] += heatmap[:, :, pose_idx] * 0.8
+        # right arm
+        for pose_idx in range(18, 23):
+            heatmap_v[:, :, 0] += heatmap[:, :, pose_idx] * 0.8
+        # left arm
+        for pose_idx in range(24, 29):
+            heatmap_v[:, :, 2] += heatmap[:, :, pose_idx] * 0.8
+
+        heatmap_v[:, :, 1] += heatmap[:, :, 5]
+        heatmap_v[:, :, 1] += heatmap[:, :, 23]
+
+        heatmap_v[np.nonzero(heatmap_v > 255.)] = 255.
+        heatmap_vs.append(heatmap_v)
+
+    return np.array(heatmap_vs).astype(np.float32)
+
+
+def heatmap_visual_mpii_big(heatmaps):
+    """
+    :param heatmaps: (w*h*29) 0~255
+    :return: (w*h*3) 0~255
+    """
+    heatmap_vs = []
+    for heatmap in heatmaps:
+        heatmap_v = np.zeros((64, 64, 3), dtype=np.float32)
+        # right legs
+        for pose_idx in range(0, 5):
+            heatmap_v[:, :, 0] += heatmap[:, :, pose_idx] * 0.8
+        # left legs
+        for pose_idx in range(6, 11):
+            heatmap_v[:, :, 2] += heatmap[:, :, pose_idx] * 0.8
+        # trunk
+        for pose_idx in range(11, 18):
+            heatmap_v[:, :, 1] += heatmap[:, :, pose_idx] * 0.8
+        # right arm
+        for pose_idx in range(18, 23):
+            heatmap_v[:, :, 0] += heatmap[:, :, pose_idx] * 0.8
+        # left arm
+        for pose_idx in range(24, 29):
+            heatmap_v[:, :, 2] += heatmap[:, :, pose_idx] * 0.8
+
+        heatmap_v[:, :, 1] += heatmap[:, :, 5]
+        heatmap_v[:, :, 1] += heatmap[:, :, 23]
+
+        heatmap_v[np.nonzero(heatmap_v > 255.)] = 255.
+        heatmap_vs.append(heatmap_v)
+
+    return np.array(heatmap_vs).astype(np.float32)
+
+
+def denorm_image(image):
+    return (image + 1.) * 127.5
+
+
+def norm_image(image):
+    return (image / 127.5) - 1.
 
 
 def heatmap_visual_sig(heatmaps):
@@ -274,7 +510,7 @@ def visualize(sess, dcgan, config, option):
         save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime()))
     elif option == 1:
         values = np.arange(0, 1, 1./config.batch_size)
-        for idx in xrange(100):
+        for idx in range(100):
             print(" [*] %d" % idx)
             z_sample = np.zeros([config.batch_size, dcgan.z_dim])
             for kdx, z in enumerate(z_sample):
@@ -292,7 +528,7 @@ def visualize(sess, dcgan, config, option):
             save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_arange_%s.png' % (idx))
     elif option == 2:
         values = np.arange(0, 1, 1./config.batch_size)
-        for idx in [random.randint(0, 99) for _ in xrange(100)]:
+        for idx in [random.randint(0, 99) for _ in range(100)]:
             print(" [*] %d" % idx)
             z = np.random.uniform(-0.2, 0.2, size=(dcgan.z_dim))
             z_sample = np.tile(z, (config.batch_size, 1))
@@ -315,7 +551,7 @@ def visualize(sess, dcgan, config, option):
                 save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime()))
     elif option == 3:
         values = np.arange(0, 1, 1./config.batch_size)
-        for idx in xrange(100):
+        for idx in range(100):
             print(" [*] %d" % idx)
             z_sample = np.zeros([config.batch_size, dcgan.z_dim])
             for kdx, z in enumerate(z_sample):
@@ -327,7 +563,7 @@ def visualize(sess, dcgan, config, option):
         image_set = []
         values = np.arange(0, 1, 1./config.batch_size)
 
-        for idx in xrange(100):
+        for idx in range(100):
             print(" [*] %d" % idx)
             z_sample = np.zeros([config.batch_size, dcgan.z_dim])
             for kdx, z in enumerate(z_sample): z[idx] = values[kdx]

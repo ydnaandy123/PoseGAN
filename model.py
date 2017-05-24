@@ -84,7 +84,6 @@ class DCGAN_city(object):
         self.G = self.generator(self.z)
         self.D, self.D_logits = self.discriminator(self.inputs)
 
-        #TODO wtf?
         self.sampler = self.sampler(self.z)
         self.D_, self.D_logits_ = self.discriminator(self.G, reuse=True)
 
@@ -183,7 +182,6 @@ class DCGAN_city(object):
                     time.time() - start_time, errD_fake+errD_real, errG))
 
                 if np.mod(counter, 100) == 1:
-                    # TODO replace sampler?
                     samples, d_loss, g_loss = self.sess.run(
                       [self.sampler, self.d_loss, self.g_loss],
                       feed_dict={
@@ -246,7 +244,6 @@ class DCGAN_city(object):
 
             return tf.nn.tanh(h4)
 
-    # TODO replace
     def sampler(self, z, y=None):
         with tf.variable_scope("generator") as scope:
             scope.reuse_variables()

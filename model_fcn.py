@@ -57,7 +57,6 @@ class FCN(object):
         :return:
         """
         print("setting up vgg initialized conv layers ...")
-        # model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL) # If not sure whether the model existed or not
         model_data = scipy.io.loadmat(os.path.join(self.FLAGS.vgg_dir, 'imagenet-vgg-verydeep-19.mat'))
 
         mean = model_data['normalization'][0][0][0]

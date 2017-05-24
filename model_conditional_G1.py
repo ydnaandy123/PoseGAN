@@ -11,7 +11,7 @@ def conv_out_size_same(size, stride):
     return int(math.ceil(float(size) / float(stride)))
 
 
-class DCGAN_conditional(object):
+class DCGAN_conditional_G1(object):
     def __init__(self, sess, config, z_dim=100,  gf_dim=64, df_dim=64,
          gfc_dim=1024, dfc_dim=1024, needCondition=False):
         """
@@ -27,6 +27,7 @@ class DCGAN_conditional(object):
         self.needCondition = needCondition
         self.crop = config.crop
 
+        self.L1_lambda = config.L1_lambda
         self.batch_size = config.batch_size
         self.sample_num = config.sample_num
 
@@ -124,7 +125,8 @@ class DCGAN_conditional(object):
             tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_logits_, labels=tf.zeros_like(self.D_)))
         # TODO: G1 loss
         self.g_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_logits_, labels=tf.ones_like(self.D_)))
+            tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_logits_, labels=tf.ones_like(self.D_))) + \
+                      self.L1_lambda * tf.reduce_mean(tf.abs(self.inputs - self.G))
         self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
         self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
 
@@ -304,23 +306,20 @@ class DCGAN_conditional(object):
         self.train_update(config, counter)
 
     def train_update(self, config, counter=0):
-        sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
-        manifold_h = int(np.ceil(np.sqrt(sample_z.shape[0])))
-        manifold_w = int(np.floor(np.sqrt(sample_z.shape[0])))
         sample_files = self.data[0:self.sample_num]
-        if config.image_dim == 16:
-            sample_images, sample_conditions = get_image_condition_pose(sample_files, config.condition_dir)
-            images_visual = merge(heatmap_visual(sample_images), [manifold_h, manifold_w])
-        else:
-            sample_images, sample_conditions = get_image_condition_pose(sample_files, config.condition_dir, pose_num=3)
-            images_visual = (merge(sample_images, [manifold_h, manifold_w])  + 1.) * 127.5
+        sample_images, sample_conditions = get_image_condition_pose(sample_files, config.condition_dir)
+        sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
+        manifold_h = int(np.ceil(np.sqrt(sample_images.shape[0])))
+        manifold_w = int(np.floor(np.sqrt(sample_images.shape[0])))
 
-        scipy.misc.imsave('./{}/sample_0_images.png'.format(config.sample_dir), images_visual.astype(np.uint8))
         conditions_visual = (merge(sample_conditions, [manifold_h, manifold_w]) + 1.) * 127.5
+        images_visual = merge(heatmap_visual(sample_images), [manifold_h, manifold_w])
+        scipy.misc.imsave('./{}/sample_0_images.png'.format(config.sample_dir), images_visual.astype(np.uint8))
         scipy.misc.imsave('./{}/sample_1_conditions.png'.format(config.sample_dir), conditions_visual.astype(np.uint8))
         images_visual_big = scipy.misc.imresize(images_visual, 4.) + conditions_visual
         images_visual_big[np.nonzero(images_visual_big > 255.)] = 255.
-        scipy.misc.imsave('./{}/sample_2_image_condition.png'.format(config.sample_dir), images_visual_big.astype(np.uint8))
+        scipy.misc.imsave('./{}/sample_2_image_condition.png'.format(config.sample_dir),
+                          images_visual_big.astype(np.uint8))
 
         start_time = time.time()
 
@@ -329,13 +328,9 @@ class DCGAN_conditional(object):
             batch_idxs = min(len(self.data), config.train_size) // config.batch_size
 
             for idx in xrange(0, batch_idxs):
+                batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
+                batch_images, batch_conditions = get_image_condition_pose(batch_files, config.condition_dir)
                 batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]).astype(np.float32)
-                batch_files = self.data[idx * config.batch_size:(idx + 1) * config.batch_size]
-                if config.image_dim == 16:
-                    batch_images, batch_conditions = get_image_condition_pose(sample_files, config.condition_dir)
-                else:
-                    batch_images, batch_conditions = get_image_condition_pose(sample_files, config.condition_dir, pose_num=3)
-
 
                 # Update D network
                 _, summary_str = self.sess.run([self.d_optim, self.d_sum],
@@ -344,18 +339,18 @@ class DCGAN_conditional(object):
 
                 # Update G network
                 _, summary_str = self.sess.run([self.g_optim, self.g_sum],
-                  feed_dict={ self.z: batch_z, self.conditions: batch_conditions})
+                  feed_dict={ self.inputs: batch_images, self.z: batch_z, self.conditions: batch_conditions})
                 self.writer.add_summary(summary_str, counter)
 
                 # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
                 _, summary_str = self.sess.run([self.g_optim, self.g_sum],
-                  feed_dict={ self.z: batch_z, self.conditions: batch_conditions})
+                  feed_dict={ self.inputs: batch_images, self.z: batch_z, self.conditions: batch_conditions})
                 self.writer.add_summary(summary_str, counter)
 
                 with self.sess.as_default():
                     errD_fake = self.d_loss_fake.eval({self.z: batch_z, self.conditions: batch_conditions})
                     errD_real = self.d_loss_real.eval({self.inputs: batch_images, self.conditions: batch_conditions})
-                    errG = self.g_loss.eval({self.z: batch_z, self.conditions: batch_conditions})
+                    errG = self.g_loss.eval({self.inputs: batch_images, self.z: batch_z, self.conditions: batch_conditions})
 
                 print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
                   % (epoch, idx, batch_idxs,
@@ -370,10 +365,7 @@ class DCGAN_conditional(object):
                           self.conditions: sample_conditions
                       },
                     )
-                    if config.image_dim == 16:
-                        images_visual = merge(heatmap_visual(samples_G), [manifold_h, manifold_w])
-                    else:
-                        images_visual = (merge(samples_G, [manifold_h, manifold_w]) + 1.) * 127.5
+                    images_visual = merge(heatmap_visual(samples_G), [manifold_h, manifold_w])
 
                     scipy.misc.imsave('./{}/train_yo_{:06d}.png'.format(config.sample_dir, counter),
                                       merge((samples_G[:, :, :, :3] + 1.) * 127.5, [manifold_h, manifold_w]).astype(np.uint8))

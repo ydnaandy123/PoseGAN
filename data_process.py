@@ -22,10 +22,12 @@ def crop_images(dataset_dir):
 
     for index, filePath in enumerate(data):
         print ('{}/{}'.format(index, len(data)))
-
+        name = filePath.split('/')[-1].split('_')
+        name_to_stroe = '{}_{}_{}.png'.format(name[0], name[1], name[2])
         img = scipy.misc.imread(filePath).astype(np.uint8)
         img = scipy.misc.imresize(img, 0.25, interp='bilinear', mode=None)
-        scipy.misc.imsave('/data/vllab1/dataset/CITYSCAPES/coarse_resize/' + filePath.split('/')[-1], img)
+        #img = scipy.misc.imresize(img, 0.25, interp='nearest', mode=None)
+        scipy.misc.imsave('/data/vllab1/dataset/CITYSCAPES/CITYSCAPES_DATASET/train/image/' + name_to_stroe, img)
         #break
 
 
@@ -630,5 +632,5 @@ def mpii_heatmap_all():
 
 
 if __name__ == '__main__':
-    mpii_heatmap_all()
+    crop_images('/data/vllab1/dataset/CITYSCAPES/leftImg8bit_trainvaltest/leftImg8bit/train')
 
