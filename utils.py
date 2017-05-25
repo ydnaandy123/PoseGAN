@@ -23,29 +23,59 @@ get_stddev = lambda x, k_h, k_w: 1/math.sqrt(k_w*k_h*x.get_shape()[-1])
 
 def config_check(flags, default_setting=False):
 
+    # TODO: currently only support *.png images
+    flags.input_fname_pattern = '*.png'
+    # Auto setting depend on config.name
     if default_setting:
+        # Optionally to use conditions and g1
+        flags.need_condition = (flags.name.find('(condition)') != -1)
+        flags.need_g1 = (flags.name.find('(g1)') != -1)
+        # Dataset name
         if flags.name.find('cityscapes') != -1:
             flags.dataset_name = 'CITYSCAPES_DATASET'
-            if flags.name.find('semantic') != -1:
-                flags.image_dir = './dataset/CITYSCAPES_DATASET/train/semantic_color'
-                flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/image'
-                flags.input_fname_pattern = '*.png'
-                flags.image_height = 256
-                flags.image_width = 512
-                flags.image_dim = 3
-                flags.condition_height = 256
-                flags.condition_width = 512
-                flags.condition_dim = 3
-            if flags.name.find('image') != -1:
+            # Generate images type
+            if flags.name.find('(generate)image') != -1:
                 flags.image_dir = './dataset/CITYSCAPES_DATASET/train/image'
-                flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/semantic_color'
-                flags.input_fname_pattern = '*.png'
                 flags.image_height = 256
                 flags.image_width = 512
                 flags.image_dim = 3
-                flags.condition_height = 256
-                flags.condition_width = 512
-                flags.condition_dim = 3
+            elif flags.name.find('(generate)semantic') != -1:
+                flags.image_dir = './dataset/CITYSCAPES_DATASET/train/semantic_color'
+                flags.image_height = 256
+                flags.image_width = 512
+                flags.image_dim = 3
+            elif flags.name.find('(generate)label') != -1:
+                flags.image_dir = './dataset/CITYSCAPES_DATASET/train/semantic_id'
+                flags.image_height = 256
+                flags.image_width = 512
+                flags.image_dim = 1
+            elif flags.name.find('(generate)label_all') != -1:
+                flags.image_dir = './dataset/CITYSCAPES_DATASET/train/semantic_id'
+                flags.image_height = 256
+                flags.image_width = 512
+                flags.image_dim = 33
+            if flags.need_condition:
+                # Conditional images type
+                if flags.name.find('(condition)image') != -1:
+                    flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/image'
+                    flags.condition_height = 256
+                    flags.condition_width = 512
+                    flags.condition_dim = 3
+                elif flags.name.find('(condition)semantic') != -1:
+                    flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/semantic_color'
+                    flags.condition_height = 256
+                    flags.condition_width = 512
+                    flags.condition_dim = 3
+                elif flags.name.find('(condition)label') != -1:
+                    flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/semantic_id'
+                    flags.condition_height = 256
+                    flags.condition_width = 512
+                    flags.condition_dim = 1
+                elif flags.name.find('(condition)label_all') != -1:
+                    flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/semantic_id'
+                    flags.condition_height = 256
+                    flags.condition_width = 512
+                    flags.condition_dim = 33
         elif flags.name.find('mpii') != -1:
             flags.dataset_name = 'MPII'
             if flags.name.find('heatmap') != -1:
@@ -59,8 +89,12 @@ def config_check(flags, default_setting=False):
                 flags.condition_width = 256
                 flags.condition_dim = 3
 
-        flags.need_condition = (flags.name.find('(y)condition') != -1)
-        flags.need_g1 = (flags.name.find('(y)g1') != -1)
+        if flags.need_condition and flags.need_g1:
+            if flags.name.find('L1') != -1:
+                flags.g1_mode = 'L1'
+            elif flags.name.find('pix2pix') != -1:
+                flags.g1_mode = 'pix2pix'
+
 
     flags.test_dir = flags.name + '_' + flags.test_dir
     flags.sample_dir = flags.name + '_' + flags.sample_dir
@@ -98,6 +132,21 @@ def get_image_condition(files, condition_dir, need_flip=True):
         name = name_file.split('/')[-1]
         image = scipy.misc.imread(name_file).astype(np.float32)[:, :, :3]
         condition = scipy.misc.imread(os.path.join(condition_dir, name)).astype(np.float32)[:, :, :3]
+        if need_flip and name_idx > len(files) / 2:
+            image = np.fliplr(image)
+            condition = np.fliplr(condition)
+        images.append(image)
+        conditions.append(condition)
+
+    images = np.array(images).astype(np.float32) / 127.5 - 1.
+    conditions = np.array(conditions).astype(np.float32) / 127.5 - 1.
+    return images, conditions
+
+
+def get_images_3channel(files, need_flip=True):
+    images = []
+    for name_idx, name_file in enumerate(files):
+        image = scipy.misc.imread(name_file).astype(np.float32)[:, :, :3]
         if need_flip and name_idx > len(files) / 2:
             image = np.fliplr(image)
             condition = np.fliplr(condition)
