@@ -3,12 +3,18 @@
     <words>
       <w>annot</w>
       <w>annots</w>
+      <w>batchs</w>
+      <w>convolutional</w>
+      <w>downsampling</w>
       <w>fname</w>
       <w>lamda</w>
       <w>lrelu</w>
       <w>mpii</w>
       <w>optim</w>
       <w>tanh</w>
+      <w>tiramisu</w>
+      <w>upsample</w>
+      <w>upsampling</w>
       <w>wgan</w>
     </words>
   </dictionary>

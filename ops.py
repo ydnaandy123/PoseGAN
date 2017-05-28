@@ -11,6 +11,10 @@ def lrelu(x, leak=0.2, name="lrelu"):
     return tf.maximum(x, leak*x, name=name)
 
 
+def elu(x, name='elu'):
+    return tf.nn.elu(x, name=name)
+
+
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
@@ -64,10 +68,8 @@ def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=
         else:
             return tf.matmul(input_, matrix) + bias
 
-
 def bn(inputs, training=True, momentum=0.9, epsilon=1e-5):
     return tf.layers.batch_normalization(inputs, training=training, momentum=momentum, epsilon=epsilon)
-
 
 class batch_norm(object):
     def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
@@ -92,11 +94,55 @@ def add_activation_summary(var):
 
 
 """
-" dense net
+" fully convolutional dense net
 """
 
-def transition_down(I):
-    I = tf.contrib.layers.batch_norm(I, decay=0.9, updates_collections=None, epsilon=1e-5,
-                                            scale=True, is_training=train, scope=self.name)
 
+def bn_relu_conv(inputs, n_filters, filter_size=3, keep_prob=0.8, training=True, name='bn_relu_conv'):
+    """
+    Apply successivly BatchNormalization, ReLu nonlinearity, Convolution and Dropout (if dropout_p > 0) on the inputs
+    """
+    # TODO: dropout order?
+    l = conv2d(elu(bn(inputs, training=training)),
+               output_dim=n_filters, k_h=filter_size, k_w=filter_size, d_h=1, d_w=1, name=name)
+
+    #l = conv2d(elu(inputs),
+    #           output_dim=n_filters, k_h=filter_size, k_w=filter_size, d_h=1, d_w=1, name=name)
+
+    l = tf.nn.dropout(l, keep_prob=keep_prob)
+    return l
+
+
+def transition_down(inputs, n_filters, keep_prob=0.8, training=True, name='transition_down'):
+    """ Apply first a BN_ReLu_conv layer with filter size = 1, and a max pooling with a factor 2  """
+
+    l = bn_relu_conv(inputs, n_filters, filter_size=1, keep_prob=keep_prob, training=training, name=name)
+    # l = Pool2DLayer(l, 2, mode='max')
+    # TODO: remove pooling?
+    l = avg_pool_2x2(l)
+
+    return l
+    # Note : network accuracy is quite similar with average pooling or without BN - ReLU.
+    # We can also reduce the number of parameters reducing n_filters in the 1x1 convolution
+
+
+def transition_up(skip_connection, block_to_upsample, n_filters_keep, training=True, name='transition_yp'):
+    """
+    Performs upsampling on block_to_upsample by a factor 2 and concatenates it with the skip_connection """
+
+    # Upsample
+    l = tf.concat(block_to_upsample, 3)
+    output_shape = l.get_shape().as_list()
+    output_shape[1] *= 2
+    output_shape[2] *= 2
+    output_shape[3] = n_filters_keep
+
+    l = bn(deconv2d(elu(l), output_shape, name=name, k_h=3, k_w=3), training=training)
+    #l = deconv2d(elu(l), output_shape, name=name, k_h=3, k_w=3)
+    # Concatenate with skip connection
+    l = tf.concat([l, skip_connection], 3)
+
+    return l
+    # Note : we also tried Subpixel Deconvolution without seeing any improvements.
+    # We can reduce the number of parameters reducing n_filters_keep in the Deconvolution
 

@@ -17,7 +17,7 @@ def crop_images(dataset_dir):
     """
     data = []
     for folder in os.listdir(dataset_dir):
-        path = os.path.join(dataset_dir, folder, "*.png")
+        path = os.path.join(dataset_dir, folder, "*_labelIds.png")
         data.extend(glob(path))
 
     for index, filePath in enumerate(data):
@@ -25,9 +25,9 @@ def crop_images(dataset_dir):
         name = filePath.split('/')[-1].split('_')
         name_to_stroe = '{}_{}_{}.png'.format(name[0], name[1], name[2])
         img = scipy.misc.imread(filePath).astype(np.uint8)
-        img = scipy.misc.imresize(img, 0.25, interp='bilinear', mode=None)
-        #img = scipy.misc.imresize(img, 0.25, interp='nearest', mode=None)
-        scipy.misc.imsave('/data/vllab1/dataset/CITYSCAPES/CITYSCAPES_DATASET/train/image/' + name_to_stroe, img)
+        #img = scipy.misc.imresize(img, 0.125, interp='bilinear', mode=None)
+        #img = scipy.misc.imresize(img, 0.125, interp='nearest', mode=None)
+        scipy.misc.imsave('/data/vllab1/dataset/CITYSCAPES/CITYSCAPES_DATASET/cityscapesScripts/results/' + name_to_stroe, img)
         #break
 
 
@@ -36,18 +36,18 @@ def crop_images_same_dir(data_set_dir):
     Read all images under the same folder
     Crop, resize and store them
     """
-    data = glob(os.path.join(data_set_dir, "*.png"))
+    data = glob(os.path.join(data_set_dir, "*_labelIds.png"))
 
     for index, filePath in enumerate(data):
         print ('%d/%d' % (index, len(data)))
 
-        img = scipy.misc.imread(filePath).astype(np.float32)
+        img = scipy.misc.imread(filePath).astype(np.uint8)
         #img = scipy.misc.imresize(img, 0.25, interp='bilinear', mode=None)
         #scipy.misc.imsave('/home/andy/dataset/CITYSCAPES/CITYSCAPES_crop_random/' + filePath.split('/')[-1],
         #                  img[offs_h[index]:offs_h_end[index], offs_w[index]:offs_w_end[index] :])
-        scipy.misc.imsave('/home/andy/dataset/CITYSCAPES/CITYSCAPES_crop_bottom_192/' + filePath.split('/')[-1],
-                          img[0:192, :, :])
-        #break
+        scipy.misc.imsave('/data/vllab1/dataset/CITYSCAPES/CITYSCAPES_DATASET/cityscapesScripts/results/' + filePath.split('/')[-1],
+                          img)
+        break
 
 
 def crop_lsp(data_set_dir):
@@ -632,5 +632,6 @@ def mpii_heatmap_all():
 
 
 if __name__ == '__main__':
-    crop_images('/data/vllab1/dataset/CITYSCAPES/leftImg8bit_trainvaltest/leftImg8bit/train')
+    #crop_images('/data/vllab1/dataset/CITYSCAPES/leftImg8bit_trainvaltest/leftImg8bit/val')
+    crop_images('/data/vllab1/dataset/CITYSCAPES/gtFine_trainvaltest/gtFine/val')
 

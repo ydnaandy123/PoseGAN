@@ -1,17 +1,17 @@
 """
-Adopt DCGAN to fully test
+fully convolutional dense net with wgan_gp
 """
 import numpy as np
-from model_semantic import SEMANTIC
+from model_fcdense import FCDENSE
 from utils import pp, show_all_variables, config_check
 import tensorflow as tf
 
 flags = tf.app.flags
 # Main
-flags.DEFINE_string("name", "cityscapes_(generate)image_(condition)semantic_(g1)L1", "The name of dataset [celebA, mnist, lsun]")
+flags.DEFINE_string("name", "cityscapes_(classify)_(generate)all_label_(condition)image_(densebn)", "The name of dataset [celebA, mnist, lsun]")
 flags.DEFINE_string("mode", "train", "network mode [train, test]")
-flags.DEFINE_integer("sample_num", 16, "The number of sample images [64]")
-flags.DEFINE_integer("batch_size", 9, "The size of batch images [64]")
+flags.DEFINE_integer("sample_num", 4, "The number of sample images [64]")
+flags.DEFINE_integer("batch_size", 4, "The size of batch images [64]")
 flags.DEFINE_boolean("default_setting", True, "True for default setting, False for nothing [False]")
 # Auto
 flags.DEFINE_string("dataset_name", "CITYSCAPES_DATASET", "The name of dataset [celebA, mnist, lsun]")
@@ -27,6 +27,7 @@ flags.DEFINE_integer("condition_dim", 3, "The dimension of the condition [3]")
 
 flags.DEFINE_boolean("need_condition", True, "True for conditional, False for nothing [False]")
 flags.DEFINE_boolean("need_g1", False, "True for plus g1, False for nothing [False]")
+flags.DEFINE_boolean("classify", False, "True for classify, False for generate [False]")
 flags.DEFINE_string("g1_mode", "pix2pix", "The directory of conditions")
 # Details
 flags.DEFINE_integer("epoch", 100, "Epoch to train [25]")
@@ -56,13 +57,13 @@ def main(_):
     run_config.gpu_options.per_process_gpu_memory_fraction = 1.0
     # Build model
     with tf.Session(config=run_config) as sess:
-        model = SEMANTIC(sess, config)
+        model = FCDENSE(sess, config)
     show_all_variables()
     # launch mode
     if FLAGS.mode == 'train':
         model.train(config)
     elif FLAGS.mode == 'test':
-        model.test_z(config)
+        model.test()
 
 if __name__ == '__main__':
     tf.app.run()

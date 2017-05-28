@@ -13,7 +13,43 @@ import numpy as np
 from time import gmtime, strftime
 from skimage.draw import line
 from scipy.ndimage.filters import gaussian_filter
-
+labels = [
+    (  0,  0,  0),
+    (  0,  0,  0),
+    (  0,  0,  0),
+    (  0,  0,  0),
+    (  0,  0,  0),
+    (111, 74,  0),
+    ( 81,  0, 81),
+    (128, 64,128),
+    (244, 35,232),
+    (250,170,160),
+    (230,150,140),
+    ( 70, 70, 70),
+    (102,102,156),
+    (190,153,153),
+    (180,165,180),
+    (150,100,100),
+    (150,120, 90),
+    (153,153,153),
+    (153,153,153),
+    (250,170, 30),
+    (220,220,  0),
+    (107,142, 35),
+    (152,251,152),
+    ( 70,130,180),
+    (220, 20, 60),
+    (255,  0,  0),
+    (  0,  0,142),
+    (  0,  0, 70),
+    (  0, 60,100),
+    (  0,  0, 90),
+    (  0,  0,110),
+    (  0, 80,100),
+    (  0,  0,230),
+    (119, 11, 32),
+    (  0,  0,142)
+]
 
 pp = pprint.PrettyPrinter()
 
@@ -30,6 +66,7 @@ def config_check(flags, default_setting=False):
         # Optionally to use conditions and g1
         flags.need_condition = (flags.name.find('(condition)') != -1)
         flags.need_g1 = (flags.name.find('(g1)') != -1)
+        flags.classify = (flags.name.find('(classify)') != -1)
         # Dataset name
         if flags.name.find('cityscapes') != -1:
             flags.dataset_name = 'CITYSCAPES_DATASET'
@@ -49,17 +86,17 @@ def config_check(flags, default_setting=False):
                 flags.image_height = 256
                 flags.image_width = 512
                 flags.image_dim = 1
-            elif flags.name.find('(generate)label_all') != -1:
+            elif flags.name.find('(generate)all_label') != -1:
                 flags.image_dir = './dataset/CITYSCAPES_DATASET/train/semantic_id'
-                flags.image_height = 256
-                flags.image_width = 512
-                flags.image_dim = 33
+                flags.image_height = 128
+                flags.image_width = 256
+                flags.image_dim = 34
             if flags.need_condition:
                 # Conditional images type
                 if flags.name.find('(condition)image') != -1:
                     flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/image'
-                    flags.condition_height = 256
-                    flags.condition_width = 512
+                    flags.condition_height = 128
+                    flags.condition_width = 256
                     flags.condition_dim = 3
                 elif flags.name.find('(condition)semantic') != -1:
                     flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/semantic_color'
@@ -71,11 +108,11 @@ def config_check(flags, default_setting=False):
                     flags.condition_height = 256
                     flags.condition_width = 512
                     flags.condition_dim = 1
-                elif flags.name.find('(condition)label_all') != -1:
+                elif flags.name.find('(condition)all_label') != -1:
                     flags.condition_dir = './dataset/CITYSCAPES_DATASET/train/semantic_id'
-                    flags.condition_height = 256
-                    flags.condition_width = 512
-                    flags.condition_dim = 33
+                    flags.condition_height = 128
+                    flags.condition_width = 256
+                    flags.condition_dim = 3
         elif flags.name.find('mpii') != -1:
             flags.dataset_name = 'MPII'
             if flags.name.find('heatmap') != -1:
@@ -94,7 +131,6 @@ def config_check(flags, default_setting=False):
                 flags.g1_mode = 'L1'
             elif flags.name.find('pix2pix') != -1:
                 flags.g1_mode = 'pix2pix'
-
 
     flags.test_dir = flags.name + '_' + flags.test_dir
     flags.sample_dir = flags.name + '_' + flags.sample_dir
@@ -139,6 +175,30 @@ def get_image_condition(files, condition_dir, need_flip=True):
         conditions.append(condition)
 
     images = np.array(images).astype(np.float32) / 127.5 - 1.
+    conditions = np.array(conditions).astype(np.float32) / 127.5 - 1.
+    return images, conditions
+
+
+def get_image_condition_classify(files, condition_dir, need_flip=True, num_of_class=34):
+    images, conditions = [], []
+    for name_idx, name_file in enumerate(files):
+        # Here, image is label
+        name = name_file.split('/')[-1]
+        image = scipy.misc.imread(name_file).astype(np.uint8)
+        labels = np.zeros((128, 256, num_of_class), dtype=np.float32)
+        for label_id in range(num_of_class):
+            label = np.ones((128, 256), dtype=np.float32)
+            label[np.nonzero(image != label_id)] = -1.0
+            labels[:, :, label_id] = label
+        condition = scipy.misc.imread(os.path.join(condition_dir, name)).astype(np.float32)[:, :, :3]
+
+        if need_flip and name_idx > len(files) / 2:
+            labels = np.fliplr(labels)
+            condition = np.fliplr(condition)
+        images.append(labels)
+        conditions.append(condition)
+
+    images = np.array(images).astype(np.float32)
     conditions = np.array(conditions).astype(np.float32) / 127.5 - 1.
     return images, conditions
 
@@ -286,6 +346,33 @@ def get_image_condition_pose_mpii_big(files, condition_dir, channel_num=29):
 
     return np.array(images).astype(np.float32), np.array(conditions).astype(np.float32)
 
+
+def label_visual(label_batchs):
+    label_batchs = np.array(np.argmax(label_batchs, axis=3))
+    w, h, = label_batchs[0].shape[0], label_batchs[0].shape[1]
+    visuals = []
+    for label in label_batchs:
+        visual = np.zeros((w, h, 3), dtype=np.float32)
+        for i in range(0, 34):
+            index = np.nonzero(label == i)
+            visual[index + (0,)] = labels[i][0]
+            visual[index + (1,)] = labels[i][1]
+            visual[index + (2,)] = labels[i][2]
+        visuals.append(visual)
+
+    return np.array(visuals).astype(np.float32)
+
+
+def label_id_visual_(label):
+    w, h, = label.shape[0], label.shape[1]
+    visual = np.zeros((w, h, 3), dtype=np.float32)
+    for i in range(0, 34):
+        index = np.nonzero(label == i)
+        visual[index + (0,)] = labels[i][0]
+        visual[index + (1,)] = labels[i][1]
+        visual[index + (2,)] = labels[i][2]
+
+    return visual.astype(np.float32)
 
 def heatmap_visual(heatmaps):
     heatmap_vs = []
