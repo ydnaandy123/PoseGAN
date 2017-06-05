@@ -6,34 +6,37 @@ from utils import *
 from ops import *
 
 
-class FcnCity(Model):
+class FcnCityBig(Model):
     def __init__(self, sess, config):
         # init
-        super(FcnCity, self).__init__(sess=sess, config=config)
+        super(FcnCityBig, self).__init__(sess=sess, config=config)
         # Network architect
         self.num_of_class = 34
         self.vgg_dir = './checkpoint'
-        # Network feed
-        self.image_height, self.image_width = 256, 512
-        self.condition_height, self.condition_width, self.condition_dim = 256, 512, 3
-        self.image_height_sample, self.image_width_sample = 1024, 2048
-        self.condition_height_sample, self.condition_width_sample, self.condition_dim_sample = 1024, 2048, 3
-        # Sample feed
-        self.val_dir_conditions = './dataset/CITYSCAPES_DATASET/leftImg8bit_trainvaltest/leftImg8bit/val'
-        self.val_dir_images = './dataset/CITYSCAPES_DATASET/gtFine_trainvaltest/gtFine/val'
-        self.val_images = []
-        for folder in os.listdir(self.val_dir_images):
-            path = os.path.join(self.val_dir_images, folder, "*.png")
-            self.val_images.extend(glob(path))
-        self.sample_files = self.val_images[0:self.sample_num]
 
     # ===================================================
     # -----------------Files processing------------------
     # ===================================================
     @overrides(Model)
+    def get_training_data(self):
+        data = []
+        for folder in os.listdir(self.image_dir):
+            path = os.path.join(self.image_dir, folder, "*_labelIds.png")
+            data.extend(glob(path))
+        return data
+
+    @overrides(Model)
+    def get_valid_data(self):
+        data = []
+        for folder in os.listdir(self.image_dir_val):
+            path = os.path.join(self.image_dir_val, folder, "*_labelIds.png")
+            data.extend(glob(path))
+        return data
+
+    @overrides(Model)
     def get_sample(self):
         # Get sample
-        images, conditions = get_city_classify_valid(self.sample_files, self.val_dir_conditions, self.need_flip)
+        images, conditions = get_city_classify_valid(self.sample_files, self.condition_dir_val, self.need_flip)
         sample_images, sample_conditions = images, conditions
         # Sample visual
         images_visual = merge(label_id_visual(sample_images), [self.manifold_h_sample, self.manifold_w_sample])
@@ -50,7 +53,7 @@ class FcnCity(Model):
 
     @overrides(Model)
     def get_batch(self, files):
-        images, conditions = get_city_classify(files, self.condition_dir)
+        images, conditions = get_city_classify_valid(files, self.condition_dir)
         return images, conditions
 
     @overrides(Model)
@@ -169,17 +172,10 @@ class FcnCity(Model):
             tf.int32, [None, self.image_height, self.image_width], name='real_images')
         self.conditions = tf.placeholder(
             tf.float32, [None, self.condition_height, self.condition_width, self.condition_dim], name='real_conditions')
-        self.images_sample = tf.placeholder(
-            tf.int32, [None, self.image_height_sample, self.image_width_sample], name='real_images_sample')
-        self.conditions_sample = tf.placeholder(
-            tf.float32, [None, self.condition_height_sample, self.condition_width_sample, self.condition_dim_sample],
-            name='real_conditions_sample')
         # Generator and discriminator
         with tf.variable_scope("GEN"):
             self.fake_images = self.generator(self.conditions, training=self.is_training)
-            self.fake_images_sample = self.generator(self.conditions_sample, training=False, reuse=True)
         self.g_loss, self.d_loss = self.loss()
-        self.g_loss_sample, self.d_loss_sample = self.loss_sample()
         # Variables and saver
         self.g_vars = tf.get_collection(key=tf.GraphKeys.TRAINABLE_VARIABLES, scope='GEN')
         self.extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -188,12 +184,6 @@ class FcnCity(Model):
     def loss(self):
         loss_classify = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=self.fake_images, labels=self.images, name="entropy")))
-        loss_d = tf.constant(0.)
-        return loss_classify, loss_d
-
-    def loss_sample(self):
-        loss_classify = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=self.fake_images_sample, labels=self.images_sample, name="entropy")))
         loss_d = tf.constant(0.)
         return loss_classify, loss_d
 
@@ -231,7 +221,7 @@ class FcnCity(Model):
         # Get samples
         images_sample, conditions_sample = self.get_sample()
         sample_feed = {self.is_training: False, self.keep_prob: 1.0,
-                       self.images_sample: images_sample, self.conditions_sample: conditions_sample}
+                       self.images: images_sample, self.conditions: conditions_sample}
         start_time = time.time()
         # every epoch
         for epoch in range(self.epoch):
@@ -256,7 +246,7 @@ class FcnCity(Model):
                 # Sample logs and visualized images
                 if np.mod(counter, 100) == 0:
                     g_samples, d_loss_samples, g_loss_samples = \
-                        self.sess.run([self.fake_images_sample, self.d_loss_sample, self.g_loss_sample], feed_dict=sample_feed)
+                        self.sess.run([self.fake_images, self.d_loss, self.g_loss], feed_dict=sample_feed)
                     images_visual = self.output_visual(g_samples)
                     scipy.misc.imsave('./{}/train_{:06d}.png'.format(self.sample_dir, counter),
                                       images_visual.astype(np.uint8))
@@ -286,8 +276,8 @@ class FcnCity(Model):
                 os.makedirs(visual_dir)
 
             val_conditions = []
-            for folder in os.listdir(self.val_dir_conditions):
-                path = os.path.join(self.val_dir_conditions, folder, "*.png")
+            for folder in os.listdir(self.condition_dir_val):
+                path = os.path.join(self.condition_dir_val, folder, "*.png")
                 val_conditions.extend(glob(path))
             # TODO: test data batch?
             for idx in range(0, len(val_conditions)):
@@ -296,9 +286,9 @@ class FcnCity(Model):
                 name = batch_files.split('/')[-1]
                 print('{:d}/{:d}: {}'.format(idx, len(val_conditions), name))
                 batch_image = [scipy.misc.imread(batch_files).astype(np.uint8)]
-                sample_feed = {self.is_training: False, self.keep_prob: 1.0, self.conditions_sample: batch_image}
-                # Fee
-                samples_g = self.sess.run(self.fake_images_sample, feed_dict=sample_feed)
+                sample_feed = {self.is_training: False, self.keep_prob: 1.0, self.conditions: batch_image}
+                # Feed
+                samples_g = self.sess.run(self.fake_images, feed_dict=sample_feed)
                 samples_g_out = np.argmax(np.squeeze(samples_g, axis=0), axis=2)
                 # Save
                 scipy.misc.imsave('./{}/{}'.format(result_dir, name), samples_g_out.astype(np.uint8))

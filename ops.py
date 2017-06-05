@@ -23,8 +23,8 @@ def avg_pool_2x2(x):
     return tf.nn.avg_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 
-def conv2d_basic(x, W, bias):
-    conv = tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding="SAME")
+def conv2d_basic(x, w, bias):
+    conv = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding="SAME")
     return tf.nn.bias_add(conv, bias)
 
 
@@ -68,11 +68,13 @@ def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=
         else:
             return tf.matmul(input_, matrix) + bias
 
+
 def bn(inputs, training=True, momentum=0.9, epsilon=1e-5):
     return tf.layers.batch_normalization(inputs, training=training, momentum=momentum, epsilon=epsilon)
 
+
 class batch_norm(object):
-    def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
+    def __init__(self, epsilon=1e-5, momentum=0.9, name="batch_norm"):
         with tf.variable_scope(name):
             self.epsilon = epsilon
             self.momentum = momentum
@@ -85,13 +87,10 @@ class batch_norm(object):
 ###
 # FCN
 ###
-
 def add_activation_summary(var):
     if var is not None:
         tf.summary.histogram(var.op.name + "/activation", var)
         tf.summary.scalar(var.op.name + "/sparsity", tf.nn.zero_fraction(var))
-
-
 
 """
 " fully convolutional dense net

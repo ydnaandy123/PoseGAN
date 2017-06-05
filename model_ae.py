@@ -6,13 +6,12 @@ from utils import *
 from ops import *
 
 
-class FcnCity(Model):
+class AeCity(Model):
     def __init__(self, sess, config):
         # init
-        super(FcnCity, self).__init__(sess=sess, config=config)
+        super(AeCity, self).__init__(sess=sess, config=config)
         # Network architect
         self.num_of_class = 34
-        self.vgg_dir = './checkpoint'
         # Network feed
         self.image_height, self.image_width = 256, 512
         self.condition_height, self.condition_width, self.condition_dim = 256, 512, 3
@@ -65,97 +64,64 @@ class FcnCity(Model):
         with tf.variable_scope("generator") as scope:
             if reuse:
                 scope.reuse_variables()
-            output_layer = self.inference(condition)
-            return output_layer
+            # TODO: need of z?
+            # condition is (256 x 512 x input_c_dim)
+            e1 = conv2d(condition, self.gf_dim, name='g_e1_conv')
+            # e1 is (128 x 256 x self.gf_dim)
+            e2 = bn(conv2d(lrelu(e1), self.gf_dim * 2, name='g_e2_conv'), training=training)
+            # e2 is (64 x 128 x self.gf_dim*2)
+            e3 = bn(conv2d(lrelu(e2), self.gf_dim * 4, name='g_e3_conv'), training=training)
+            # e3 is (32 x 64 x self.gf_dim*4)
+            e4 = bn(conv2d(lrelu(e3), self.gf_dim * 8, name='g_e4_conv'), training=training)
+            # e4 is (16 x 32 x self.gf_dim*8)
+            e5 = bn(conv2d(lrelu(e4), self.gf_dim * 8, name='g_e5_conv'), training=training)
+            # e5 is (8 x 16 x self.gf_dim*8)
+            e6 = bn(conv2d(lrelu(e5), self.gf_dim * 8, name='g_e6_conv'), training=training)
+            # e6 is (4 x 8 x self.gf_dim*8)
+            e7 = bn(conv2d(lrelu(e6), self.gf_dim * 8, name='g_e7_conv'), training=training)
+            # e7 is (2 x 4 x self.gf_dim*8)
+            e8 = conv2d(lrelu(e7), self.gf_dim * 8, name='g_e8_conv')
+            # e8 is (1 x 2 x self.gf_dim*8)
 
-    def vgg_net(self, weights, image):
-        layers = (
-            'conv1_1', 'relu1_1', 'conv1_2', 'relu1_2', 'pool1',
-
-            'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2',
-
-            'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2', 'conv3_3',
-            'relu3_3', 'conv3_4', 'relu3_4', 'pool3',
-
-            'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3',
-            'relu4_3', 'conv4_4', 'relu4_4', 'pool4',
-
-            'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3',
-            'relu5_3', 'conv5_4', 'relu5_4'
-        )
-
-        net = {}
-        current = image
-        for i, name in enumerate(layers):
-            kind = name[:4]
-            if kind == 'conv':
-                kernels, bias = weights[i][0][0][0][0]
-                kernels = get_variable(np.transpose(kernels, (1, 0, 2, 3)), name=name + "_w")
-                bias = get_variable(bias.reshape(-1), name=name + "_b")
-                current = conv2d_basic(current, kernels, bias)
-            elif kind == 'relu':
-                current = tf.nn.relu(current, name=name)
-                if self.debug:
-                    add_activation_summary(current)
-            elif kind == 'pool':
-                current = avg_pool_2x2(current)
-            net[name] = current
-
-        return net
-
-    def inference(self, image):
-        print("setting up vgg initialized conv layers ...")
-        model_data = scipy.io.loadmat(os.path.join(self.vgg_dir, 'imagenet-vgg-verydeep-19.mat'))
-        mean = model_data['normalization'][0][0][0]
-        mean_pixel = np.mean(mean, axis=(0, 1))
-        weights = np.squeeze(model_data['layers'])
-        processed_image = image - mean_pixel
-
-        with tf.variable_scope("inference"):
-            image_net = self.vgg_net(weights, processed_image)
-            conv_final_layer = image_net["conv5_3"]
-
-            pool5 = max_pool_2x2(conv_final_layer)
-
-            w6 = tf.get_variable('w6', [7, 7, 512, 4096], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            b6 = tf.get_variable('b6', [4096], initializer=tf.constant_initializer(0.0))
-            conv6 = conv2d_basic(pool5, w6, b6)
-            relu6 = tf.nn.relu(conv6, name="relu6")
-            if self.debug:
-                add_activation_summary(relu6)
-            relu_dropout6 = tf.nn.dropout(relu6, keep_prob=self.keep_prob)
-
-            w7 = tf.get_variable('w7', [1, 1, 4096, 4096], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            b7 = tf.get_variable('b7', [4096], initializer=tf.constant_initializer(0.0))
-            conv7 = conv2d_basic(relu_dropout6, w7, b7)
-            relu7 = tf.nn.relu(conv7, name="relu7")
-            if self.debug:
-                add_activation_summary(relu7)
-            relu_dropout7 = tf.nn.dropout(relu7, keep_prob=self.keep_prob)
-
-            w8 = tf.get_variable('w8', [1, 1, 4096, self.num_of_class],
-                                 initializer=tf.truncated_normal_initializer(stddev=0.02))
-            b8 = tf.get_variable('b8', [self.num_of_class], initializer=tf.constant_initializer(0.0))
-            conv8 = conv2d_basic(relu_dropout7, w8, b8)
-            # annotation_pred1 = tf.argmax(conv8, dimension=3, name="prediction1")
-
-            # now to upscale to actual image size
-            # TODO: no relu? fuse? concat?
-            deconv_shape1 = image_net["pool4"].get_shape().as_list()
-            conv_t1 = deconv2d(conv8, [-1, deconv_shape1[1], deconv_shape1[2], deconv_shape1[3]],
-                               k_h=4, k_w=4, name='conv_t1')
-            fuse_1 = tf.add(conv_t1, image_net["pool4"], name="fuse_1")
-
-            deconv_shape2 = image_net["pool3"].get_shape()
-            conv_t2 = deconv2d(fuse_1, [-1, deconv_shape2[1], deconv_shape2[2], deconv_shape2[3]],
-                               k_h=4, k_w=4, name='conv_t2')
-            fuse_2 = tf.add(conv_t2, image_net["pool3"], name="fuse_2")
-
-            shape = image.get_shape()
-            conv_t3 = deconv2d(fuse_2, [-1, shape[1], shape[2], self.num_of_class],
-                               k_h=16, k_w=16, d_h=8, d_w=8, name='conv_t3')
-
-        return conv_t3
+            deconv_shape1 = e7.get_shape().as_list()
+            d1 = bn(deconv2d(tf.nn.relu(e8), [-1, deconv_shape1[1], deconv_shape1[2], self.gf_dim * 8],
+                             name='g_d1'), training=training)
+            d1 = tf.concat([d1, e7], 3)
+            # d1 is (2 x 2 x self.gf_dim*8*2)
+            deconv_shape2 = e6.get_shape().as_list()
+            d2 = bn(deconv2d(tf.nn.relu(d1), [-1, deconv_shape2[1], deconv_shape2[2], self.gf_dim * 8],
+                             name='g_d2'), training=training)
+            d2 = tf.concat([d2, e6], 3)
+            # d2 is (4 x 4 x self.gf_dim*8*2)
+            deconv_shape3 = e5.get_shape().as_list()
+            d3 = bn(deconv2d(tf.nn.relu(d2), [-1, deconv_shape3[1], deconv_shape3[2], self.gf_dim * 8],
+                             name='g_d3'), training=training)
+            d3 = tf.concat([d3, e5], 3)
+            # d3 is (8 x 8 x self.gf_dim*8*2)
+            deconv_shape4 = e4.get_shape().as_list()
+            d4 = bn(deconv2d(tf.nn.relu(d3), [-1, deconv_shape4[1], deconv_shape4[2], self.gf_dim * 8],
+                             name='g_d4'), training=training)
+            d4 = tf.concat([d4, e4], 3)
+            # d4 is (16 x 16 x self.gf_dim*8*2)
+            deconv_shape5 = e3.get_shape().as_list()
+            d5 = bn(deconv2d(tf.nn.relu(d4), [-1, deconv_shape5[1], deconv_shape5[2], self.gf_dim * 4],
+                             name='g_d5'), training=training)
+            d5 = tf.concat([d5, e3], 3)
+            # d5 is (32 x 32 x self.gf_dim*4*2)
+            deconv_shape6 = e2.get_shape().as_list()
+            d6 = bn(deconv2d(tf.nn.relu(d5), [-1, deconv_shape6[1], deconv_shape6[2], self.gf_dim * 2],
+                             name='g_d6'), training=training)
+            d6 = tf.concat([d6, e2], 3)
+            # d6 is (64 x 64 x self.gf_dim*2*2)
+            deconv_shape7 = e1.get_shape().as_list()
+            d7 = bn(deconv2d(tf.nn.relu(d6), [-1, deconv_shape7[1], deconv_shape7[2], self.gf_dim],
+                             name='g_d7'), training=training)
+            d7 = tf.concat([d7, e1], 3)
+            # d7 is (128 x 128 x self.gf_dim*1*2)
+            deconv_shape8 = condition.get_shape().as_list()
+            d8 = deconv2d(tf.nn.relu(d7), [-1, deconv_shape8[1], deconv_shape8[2], self.num_of_class], name='g_d8')
+            # d8 is (256 x 256 x output_c_dim)
+            return d8
 
     # ===================================================
     # -----------------Network design--------------------
@@ -262,7 +228,7 @@ class FcnCity(Model):
                                       images_visual.astype(np.uint8))
                     print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss_samples, g_loss_samples))
                 # Checkpoint, save model
-                if np.mod(counter, 500) == 100:
+                if np.mod(counter, 500) == 200:
                     print('Model saved...')
                     self.save(self.checkpoint_dir, counter)
 
@@ -295,16 +261,52 @@ class FcnCity(Model):
                 batch_files = val_conditions[idx]
                 name = batch_files.split('/')[-1]
                 print('{:d}/{:d}: {}'.format(idx, len(val_conditions), name))
-                batch_image = [scipy.misc.imread(batch_files).astype(np.uint8)]
-                sample_feed = {self.is_training: False, self.keep_prob: 1.0, self.conditions_sample: batch_image}
-                # Fee
-                samples_g = self.sess.run(self.fake_images_sample, feed_dict=sample_feed)
-                samples_g_out = np.argmax(np.squeeze(samples_g, axis=0), axis=2)
+                batch_image = [scipy.misc.imresize(scipy.misc.imread(batch_files).astype(np.uint8), 0.25)]
+                #sample_feed = {self.is_training: False, self.keep_prob: 1.0, self.conditions_sample: batch_image}
+                sample_feed = {self.is_training: False, self.keep_prob: 1.0, self.conditions: batch_image}
+                # Feed
+                #samples_g = self.sess.run(self.fake_images_sample, feed_dict=sample_feed)
+                samples_g = self.sess.run(self.fake_images, feed_dict=sample_feed)
+                samples_g_out = np.squeeze(np.argmax(samples_g, axis=3), axis=0)
                 # Save
                 scipy.misc.imsave('./{}/{}'.format(result_dir, name), samples_g_out.astype(np.uint8))
                 label_v = label_id_visual_single(samples_g_out)
                 scipy.misc.imsave('./{}/{}'.format(visual_dir, name), label_v.astype(np.uint8))
-                #break
+                break
+        else:
+            print(" [!] Load failed...")
+            raise Exception("[!] Train a model first, then run test mode")
+
+    def test(self):
+        tf.global_variables_initializer().run(session=self.sess)
+        could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+
+        if could_load:
+            print(" [*] Load SUCCESS")
+            result_dir = './results'
+            visual_dir = './visual'
+            if not os.path.exists(result_dir):
+                os.makedirs(result_dir)
+            if not os.path.exists(visual_dir):
+                os.makedirs(visual_dir)
+
+            train_conditions = glob(os.path.join(self.condition_dir, "*.png"))
+            # TODO: test data batch?
+            for idx in range(0, len(train_conditions)):
+                # Get feeds
+                batch_files = train_conditions[idx]
+                name = batch_files.split('/')[-1]
+                print('{:d}/{:d}: {}'.format(idx, len(train_conditions), name))
+                batch_image = [scipy.misc.imread(batch_files).astype(np.uint8)]
+                sample_feed = {self.is_training: False, self.keep_prob: 1.0, self.conditions: batch_image}
+                # Feed
+                samples_g = self.sess.run(self.fake_images, feed_dict=sample_feed)
+                samples_g_out = np.squeeze(np.argmax(samples_g, axis=3), axis=0)
+                # Save
+                scipy.misc.imsave('./{}/{}'.format(result_dir, name), samples_g_out.astype(np.uint8))
+                label_v = label_id_visual_single(samples_g_out)
+                scipy.misc.imsave('./{}/{}'.format(visual_dir, name), label_v.astype(np.uint8))
+                break
         else:
             print(" [!] Load failed...")
             raise Exception("[!] Train a model first, then run test mode")

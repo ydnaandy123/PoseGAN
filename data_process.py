@@ -6,7 +6,7 @@ import h5py
 from scipy.ndimage.filters import gaussian_filter
 import os.path
 from skimage.draw import line
-
+import pickle
 
 def crop_images(dataset_dir):
     """
@@ -48,6 +48,55 @@ def crop_images_same_dir(data_set_dir):
         scipy.misc.imsave('/data/vllab1/dataset/CITYSCAPES/CITYSCAPES_DATASET/cityscapesScripts/results/' + filePath.split('/')[-1],
                           img)
         break
+
+
+def cityscapes_resize_train():
+    gt_fine = '/data/vllab1/dataset/CITYSCAPES/gtFine_trainvaltest/gtFine/train'
+    pred_dir = '/data/vllab1/dataset/CITYSCAPES/leftImg8bit_trainvaltest/leftImg8bit/train'
+
+    image_dir = '/data/vllab1/Github/pose_gan/dataset/CITYSCAPES_DATASET/train/image'
+    color_dir = '/data/vllab1/Github/pose_gan/dataset/CITYSCAPES_DATASET/train/semantic_color'
+    id_dir = '/data/vllab1/Github/pose_gan/dataset/CITYSCAPES_DATASET/train/semantic_id'
+    pred_image = []
+    for folder in os.listdir(pred_dir):
+        path = os.path.join(pred_dir, folder, "*.png")
+        pred_image.extend(glob(path))
+
+    for dir_idx, dir_val in enumerate(pred_image):
+        name = dir_val.split('/')[-1].split('_')
+        name_out = '{}_{}_{}'.format(name[0], name[1], name[2])
+        print('{:d}/{:d} : {}'.format(dir_idx, len(pred_image), name_out))
+        image = scipy.misc.imresize(scipy.misc.imread(dir_val), 0.25)
+        color = scipy.misc.imresize(scipy.misc.imread(os.path.join(
+            gt_fine, name[0], '{}_gtFine_color.png'.format(name_out)
+        )), 0.25)
+        id = scipy.misc.imresize(scipy.misc.imread(os.path.join(
+            gt_fine, name[0], '{}_gtFine_labelIds.png'.format(name_out)
+        )), 0.25, 'nearest')
+
+        scipy.misc.imsave('{}/{}.png'.format(image_dir, name_out), image)
+        scipy.misc.imsave('{}/{}.png'.format(color_dir, name_out), color)
+        scipy.misc.imsave('{}/{}.png'.format(id_dir, name_out), id)
+
+        #break
+
+
+def without_human_image():
+    file_obj = open('/data/vllab1/dataset/CITYSCAPES/CITY/extended_human_wo.pkl', 'r')
+    human_wo = pickle.load(file_obj)
+    length = len(human_wo)
+
+    for img_idx, img_path in enumerate(human_wo):
+        name = human_wo[img_idx]
+        try:
+            img = scipy.misc.imread('/data/vllab1/dataset/CITYSCAPES/coarse_resize/{}_leftImg8bit.png'.format(name))
+        except IOError:
+            continue
+        print('{:d}/{:d} {}'.format(img_idx, length, name))
+
+        scipy.misc.imsave('/data/vllab1/Github/pose_gan/dataset/CITY_inpainting/no_human/{}.png'.format(name), img.astype(np.uint8))
+        #break
+
 
 
 def crop_lsp(data_set_dir):
@@ -633,5 +682,6 @@ def mpii_heatmap_all():
 
 if __name__ == '__main__':
     #crop_images('/data/vllab1/dataset/CITYSCAPES/leftImg8bit_trainvaltest/leftImg8bit/val')
-    crop_images('/data/vllab1/dataset/CITYSCAPES/gtFine_trainvaltest/gtFine/val')
+    #crop_images('/data/vllab1/dataset/CITYSCAPES/gtFine_trainvaltest/gtFine/val')
+    without_human_image()
 

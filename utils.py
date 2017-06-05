@@ -13,6 +13,7 @@ import numpy as np
 from time import gmtime, strftime
 from skimage.draw import line
 from scipy.ndimage.filters import gaussian_filter
+import pickle
 labels = [
     (  0,  0,  0),
     (  0,  0,  0),
@@ -55,6 +56,13 @@ pp = pprint.PrettyPrinter()
 
 
 get_stddev = lambda x, k_h, k_w: 1/math.sqrt(k_w*k_h*x.get_shape()[-1])
+
+
+def overrides(interface_class):
+    def overrider(method):
+        assert(method.__name__ in dir(interface_class))
+        return method
+    return overrider
 
 
 def config_check(flags, default_setting=False):
@@ -156,6 +164,15 @@ def config_check(flags, default_setting=False):
     return flags, model_dir
 
 
+def config_check_directory(flags):
+    flags.test_dir = flags.name + '_' + flags.test_dir
+    flags.sample_dir = flags.name + '_' + flags.sample_dir
+    if not os.path.exists(flags.checkpoint_dir):
+        os.makedirs(flags.checkpoint_dir)
+    if not os.path.exists(flags.sample_dir):
+        os.makedirs(flags.sample_dir)
+
+
 def show_all_variables():
     model_vars = tf.trainable_variables()
     slim.model_analyzer.analyze_vars(model_vars, print_info=True)
@@ -200,6 +217,82 @@ def get_image_condition_classify(files, condition_dir, need_flip=True, num_of_cl
 
     images = np.array(images).astype(np.float32)
     conditions = np.array(conditions).astype(np.float32) / 127.5 - 1.
+    return images, conditions
+
+
+def get_city_classify(files, condition_dir, need_flip=True, num_of_class=34):
+    # Here, image is label
+    images, conditions = [], []
+    for name_idx, name_file in enumerate(files):
+        name = name_file.split('/')[-1]
+        image = scipy.misc.imread(name_file).astype(np.uint8)
+        condition = scipy.misc.imread(os.path.join(condition_dir, name)).astype(np.uint8)[:, :, :3]
+
+        if need_flip and name_idx > len(files) / 2:
+            image = np.fliplr(image)
+            condition = np.fliplr(condition)
+
+        images.append(image)
+        conditions.append(condition)
+
+    images = np.array(images).astype(np.float32)
+    conditions = np.array(conditions).astype(np.float32)
+    return images, conditions
+
+
+def get_city_classify_valid(files, condition_dir, need_flip=True, num_of_class=34):
+    images, conditions = [], []
+    for name_idx, name_file in enumerate(files):
+        name = name_file.split('/')[-1].split('_')
+        city = name[0]
+        name_condition = '{}_{}_{}_leftImg8bit.png'.format(name[0], name[1], name[2])
+        image = scipy.misc.imread(name_file).astype(np.uint8)
+        condition = scipy.misc.imread(os.path.join(condition_dir, city, name_condition)).astype(np.uint8)[:, :, :3]
+        if need_flip and name_idx > len(files) / 2:
+            image = np.fliplr(image)
+            condition = np.fliplr(condition)
+        images.append(image)
+        conditions.append(condition)
+    images = np.array(images).astype(np.float32)
+    conditions = np.array(conditions).astype(np.float32)
+    return images, conditions
+
+
+def get_city_generate(files, condition_dir, need_flip=True, num_of_class=34):
+    images, conditions = [], []
+    for name_idx, name_file in enumerate(files):
+        name = name_file.split('/')[-1]
+        image = scipy.misc.imread(name_file).astype(np.uint8)[:, :, :3]
+        condition = scipy.misc.imread(os.path.join(condition_dir, name)).astype(np.uint8)
+        # resize
+        image = scipy.misc.imresize(image, 0.5)
+        condition = scipy.misc.imresize(condition, 0.5, 'nearest')
+        if need_flip and name_idx > len(files) / 2:
+            image = np.fliplr(image)
+            condition = np.fliplr(condition)
+        images.append(image)
+        conditions.append(condition)
+    images = np.array(images).astype(np.float32) / 127.5 - 1
+    conditions = np.array(conditions).astype(np.int32)
+    return images, conditions
+
+
+def get_city_generate_image(files, condition_dir, need_flip=True, num_of_class=34):
+    images, conditions = [], []
+    for name_idx, name_file in enumerate(files):
+        name = name_file.split('/')[-1]
+        image = scipy.misc.imread(name_file).astype(np.uint8)[:, :, :3]
+        condition = scipy.misc.imread(os.path.join(condition_dir, name)).astype(np.uint8)[:, :, :3]
+        # resize
+        image = scipy.misc.imresize(image, 0.5)
+        condition = scipy.misc.imresize(condition, 0.5)
+        if need_flip and name_idx > len(files) / 2:
+            image = np.fliplr(image)
+            condition = np.fliplr(condition)
+        images.append(image)
+        conditions.append(condition)
+    images = np.array(images).astype(np.float32) / 127.5 - 1.
+    conditions = np.array(conditions).astype(np.int32) / 127.5 - 1.
     return images, conditions
 
 
@@ -359,11 +452,24 @@ def label_visual(label_batchs):
             visual[index + (1,)] = labels[i][1]
             visual[index + (2,)] = labels[i][2]
         visuals.append(visual)
-
     return np.array(visuals).astype(np.float32)
 
 
-def label_id_visual_(label):
+def label_id_visual(label_batch):
+    w, h, = label_batch[0].shape[0], label_batch[0].shape[1]
+    visuals = []
+    for label in label_batch:
+        visual = np.zeros((w, h, 3), dtype=np.float32)
+        for i in range(0, 34):
+            index = np.nonzero(label == i)
+            visual[index + (0,)] = labels[i][0]
+            visual[index + (1,)] = labels[i][1]
+            visual[index + (2,)] = labels[i][2]
+        visuals.append(visual)
+    return np.array(visuals).astype(np.uint8)
+
+
+def label_id_visual_single(label):
     w, h, = label.shape[0], label.shape[1]
     visual = np.zeros((w, h, 3), dtype=np.float32)
     for i in range(0, 34):
@@ -371,8 +477,9 @@ def label_id_visual_(label):
         visual[index + (0,)] = labels[i][0]
         visual[index + (1,)] = labels[i][1]
         visual[index + (2,)] = labels[i][2]
+    return np.array(visual).astype(np.uint8)
 
-    return visual.astype(np.float32)
+
 
 def heatmap_visual(heatmaps):
     heatmap_vs = []
@@ -511,7 +618,7 @@ def merge_images(images, size):
 
 def merge(images, size):
     h, w = images.shape[1], images.shape[2]
-    if (images.shape[3] in (3,4)):
+    if images.shape[3] in (3,4):
         c = images.shape[3]
         img = np.zeros((h * size[0], w * size[1], c))
         for idx, image in enumerate(images):
